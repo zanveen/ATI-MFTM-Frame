@@ -15,7 +15,8 @@ import io
 
 # ─── 설정 ───
 st.set_page_config(
-    page_title="Frame 제작 진행현황 관리",
+    page_title="Frame 제작 현황 관리",
+    page_icon=logo,
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -698,7 +699,7 @@ else:
             notes_top = st.text_area("특이사항", placeholder="추가 전달 사항을 입력하세요", height=80)
             
             st.markdown("<br>", unsafe_allow_html=True)
-            submitted = st.form_submit_button("구글 시트에 프로젝트 등록", use_container_width=True)
+            submitted = st.form_submit_button("프로젝트 등록", use_container_width=True)
 
             if submitted:
                 if not equipment: st.error("장비명은 필수 입력입니다.")
@@ -832,7 +833,7 @@ else:
                                     proj["info"]["delivery_date"] = str(new_date_admin)
                                     proj["info"]["delivery_delay_count"] = info.get("delivery_delay_count", 0) + 1
                                     save_to_sheets(st.session_state.projects)
-                                    st.session_state.flash_msg = "✅ 구글 시트에 납기일이 변경되었습니다!"
+                                    st.session_state.flash_msg = "✅ 납기일이 변경되었습니다!"
                                     st.rerun()
 
                 st.markdown("---")
@@ -876,7 +877,7 @@ else:
                     if "history" not in proj: proj["history"] = []
                     proj["history"].append({"date": str(check_date), "progress": int(calc_progress(updated_checks) * 100), "score": calc_score(updated_checks), "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M")})
                     save_to_sheets(st.session_state.projects)
-                    st.success("✅ 구글 시트에 점검 결과가 저장되었습니다.")
+                    st.success("✅ 점검 결과가 저장되었습니다.")
 
                 if proj.get("history"):
                     st.markdown("### 점검 히스토리")
