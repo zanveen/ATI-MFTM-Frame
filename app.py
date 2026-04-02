@@ -12,10 +12,14 @@ from datetime import datetime, date, timedelta
 from pathlib import Path
 from openpyxl import load_workbook
 import io
+from PIL import Image
 
 # ─── 설정 ───
+logo = Image.open("ati_logo.png")
+
 st.set_page_config(
-    page_title="Frame 제작 진행현황 관리",
+    page_title="Frame 제작 현황 관리",
+    page_icon=logo,
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -239,36 +243,28 @@ st.markdown("""
     .badge-blue { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
     .category-header { background: #4A90D9; color: white; padding: 10px 18px; border-radius: 8px; margin: 22px 0 10px 0; font-weight: bold; font-size: 19px; }
 
-    div[data-testid="stHorizontalBlock"] button[kind="primary"] {
-        height: 115px !important; border-radius: 16px !important; background-color: white !important;
-        border: 2px solid #cbd5e1 !important; transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s, border-color 0.2s !important; padding: 0 !important;
+    /* 대시보드 지표 카드는 HTML로 표시, 버튼은 일반 secondary */
+    .metric-card-html {
+        background: white; border-radius: 16px; padding: 20px 10px;
+        text-align: center; border: 2px solid #cbd5e1;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        transition: transform 0.2s, box-shadow 0.2s;
+        cursor: pointer; min-height: 100px;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
     }
-    div[data-testid="stHorizontalBlock"] button[kind="primary"]:hover {
-        transform: scale(1.05) !important; box-shadow: 0 8px 16px rgba(0,0,0,0.1) !important; border-color: #4A90D9 !important; z-index: 10 !important;
+    .metric-card-html:hover {
+        transform: translateY(-3px); box-shadow: 0 6px 16px rgba(0,0,0,0.1);
     }
-    div[data-testid="stHorizontalBlock"] button[kind="primary"] p {
-        display: block !important; white-space: pre-wrap !important; font-size: 17px !important; font-weight: 600 !important; color: #475569 !important; text-align: center; margin: 0; line-height: 1.4;
+    .metric-card-html.active {
+        border: 3px solid #4A90D9; background: #eff6ff;
     }
-    div[data-testid="stHorizontalBlock"] button[kind="primary"] p::first-line {
-        font-size: 42px !important; font-weight: 900 !important; color: #4A90D9 !important; line-height: 1.2;
+    .metric-card-html.active-red {
+        border: 3px solid #e74c3c; background: #fef2f2;
     }
+    .metric-num { font-size: 42px; font-weight: 900; line-height: 1.2; }
+    .metric-lbl { font-size: 16px; font-weight: 600; color: #475569; margin-top: 4px; }
 
-    /* 대시보드 납기임박 빨간색 고정 CSS */
-    div[data-testid="column"]:nth-child(4) button p,
-    div[data-testid="column"]:nth-of-type(4) button p,
-    div[data-testid="stHorizontalBlock"] > div:nth-child(4) button p,
-    div[data-testid="stHorizontalBlock"] > div:last-child button p { color: #e74c3c !important; }
-    
-    div[data-testid="column"]:nth-child(4) button p::first-line,
-    div[data-testid="column"]:nth-of-type(4) button p::first-line,
-    div[data-testid="stHorizontalBlock"] > div:nth-child(4) button p::first-line,
-    div[data-testid="stHorizontalBlock"] > div:last-child button p::first-line { color: #e74c3c !important; }
-    
-    div[data-testid="column"]:nth-child(4) button,
-    div[data-testid="column"]:nth-of-type(4) button { border-color: #fca5a5 !important; }
-    
-    div[data-testid="column"]:nth-child(4) button:hover,
-    div[data-testid="column"]:nth-of-type(4) button:hover { border-color: #e74c3c !important; background-color: #fef2f2 !important; }
+    /* 대시보드 납기임박 빨간색은 HTML에서 직접 처리 */
 </style>
 """, unsafe_allow_html=True)
 
@@ -422,20 +418,24 @@ else:
             urgent_pids = [pid for pid, p in projects.items() if get_project_status(p) == "납기임박"]
             in_progress_pids = [pid for pid, p in projects.items() if get_project_status(p) == "진행중"]
 
-            filters = [("전체", len(projects), "전체 프로젝트"), ("진행중", len(in_progress_pids), "진행중"), ("완료", len(completed_pids), "완료"), ("납기임박", len(urgent_pids), "납기임박")]
+            filters = [
+                ("전체", len(projects), "전체 프로젝트", "#4A90D9"),
+                ("진행중", len(in_progress_pids), "진행중", "#f39c12"),
+                ("완료", len(completed_pids), "완료", "#27ae60"),
+                ("납기임박", len(urgent_pids), "납기임박", "#e74c3c"),
+            ]
             cols = st.columns(4)
-            for i, (key, num, label) in enumerate(filters):
+            for i, (key, num, label, color) in enumerate(filters):
                 with cols[i]:
-                    if st.session_state.dashboard_filter == key:
-                        active_border, active_bg = ("#e74c3c", "#fef2f2") if key == "납기임박" else ("#4A90D9", "#eff6ff")
-                        st.markdown(f"""
-                        <style>
-                        div[data-testid="column"]:nth-of-type({i+1}) button[kind="primary"] {{
-                            transform: scale(1.06) !important; border: 3px solid {active_border} !important; background-color: {active_bg} !important; box-shadow: 0 8px 20px rgba(0,0,0,0.1) !important;
-                        }}
-                        </style>
-                        """, unsafe_allow_html=True)
-                    if st.button(f"{num}\n{label}", key=f"filter_{key}", use_container_width=True, type="primary"):
+                    is_active = st.session_state.dashboard_filter == key
+                    active_cls = "active-red" if (is_active and key == "납기임박") else "active" if is_active else ""
+                    st.markdown(f"""
+                    <div class="metric-card-html {active_cls}">
+                        <div class="metric-num" style="color:{color};">{num}</div>
+                        <div class="metric-lbl">{label}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    if st.button(key, key=f"filter_{key}", use_container_width=True):
                         st.session_state.dashboard_filter = key
                         st.rerun()
 
@@ -669,35 +669,7 @@ else:
         """, unsafe_allow_html=True)
         st.markdown("---")
 
-        # 🔥 입력 폼: clear_on_submit=True 를 넣어서 제출 시 입력칸 자동 초기화!
-        with st.form("new_project_form", clear_on_submit=True):
-            company = st.radio("업체명 *", ["한울산업", "정한테크"], horizontal=True)
-            
-            c1, c2 = st.columns(2)
-            equipment = c1.text_input("장비명 (설비명) *", placeholder="장비명을 입력하세요")
-            order_date = c2.date_input("발주일")
-            
-            c3, c4 = st.columns(2)
-            frame_parts = c3.number_input("Frame Part 수 (덩어리) *", min_value=1, value=1, step=1)
-            delivery_date = c4.date_input("납품 예정일자")
-
-            st.markdown("<br><b>프레임 옵션</b>", unsafe_allow_html=True)
-            opt_cols = st.columns(3)
-            with opt_cols[0]: opt_clean = st.checkbox("클린부스")
-            with opt_cols[1]: opt_table = st.checkbox("테이블")
-            with opt_cols[2]: opt_jig = st.checkbox("전도방지지그")
-            frame_options = [opt for opt, checked in zip(["클린부스", "테이블", "전도방지지그"], [opt_clean, opt_table, opt_jig]) if checked]
-
-            st.markdown("<hr style='margin:15px 0;'>", unsafe_allow_html=True)
-            
-            spec_col1, spec_col2 = st.columns(2)
-            with spec_col1: exterior_spec = st.radio("외관 사양", ["SUS", "도장"], horizontal=True)
-            with spec_col2: interior_spec = st.radio("내부 사양", ["SUS", "도장"], horizontal=True)
-
-            notes_top = st.text_area("특이사항", placeholder="추가 전달 사항을 입력하세요", height=80)
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            submitted = st.form_submit_button("구글 시트에 프로젝트 등록", use_container_width=True)
+        # 🔥 입력 프로젝트 등록", use_container_width=True)
 
             if submitted:
                 if not equipment: st.error("장비명은 필수 입력입니다.")
@@ -831,7 +803,7 @@ else:
                                     proj["info"]["delivery_date"] = str(new_date_admin)
                                     proj["info"]["delivery_delay_count"] = info.get("delivery_delay_count", 0) + 1
                                     save_to_sheets(st.session_state.projects)
-                                    st.session_state.flash_msg = "✅ 구글 시트에 납기일이 변경되었습니다!"
+                                    st.session_state.flash_msg = "✅ 납기일이 변경되었습니다!"
                                     st.rerun()
 
                 st.markdown("---")
@@ -910,7 +882,7 @@ else:
                     if "history" not in proj: proj["history"] = []
                     proj["history"].append({"date": str(check_date), "progress": int(calc_progress(updated_checks) * 100), "score": calc_score(updated_checks), "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M")})
                     save_to_sheets(st.session_state.projects)
-                    st.success("✅ 구글 시트에 점검 결과가 저장되었습니다.")
+                    st.success("✅ 점검 결과가 저장되었습니다.")
 
                 if proj.get("history"):
                     st.markdown("### 점검 히스토리")
