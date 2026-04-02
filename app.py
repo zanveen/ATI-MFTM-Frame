@@ -12,14 +12,14 @@ from datetime import datetime, date, timedelta
 from pathlib import Path
 from openpyxl import load_workbook
 import io
-from PIL import Image
+
+from PIL import Image as PILImage
 
 # ─── 설정 ───
-logo = Image.open("ati_logo.png")
-
+_logo_icon = PILImage.open("ati_logo.png") if os.path.exists("ati_logo.png") else "🏭"
 st.set_page_config(
     page_title="Frame 제작 현황 관리",
-    page_icon=logo,
+    page_icon=_logo_icon,
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -669,7 +669,35 @@ else:
         """, unsafe_allow_html=True)
         st.markdown("---")
 
-        # 🔥 입력 프로젝트 등록", use_container_width=True)
+        # 🔥 입력 폼: clear_on_submit=True 를 넣어서 제출 시 입력칸 자동 초기화!
+        with st.form("new_project_form", clear_on_submit=True):
+            company = st.radio("업체명 *", ["한울산업", "정한테크"], horizontal=True)
+            
+            c1, c2 = st.columns(2)
+            equipment = c1.text_input("장비명 (설비명) *", placeholder="장비명을 입력하세요")
+            order_date = c2.date_input("발주일")
+            
+            c3, c4 = st.columns(2)
+            frame_parts = c3.number_input("Frame Part 수 (덩어리) *", min_value=1, value=1, step=1)
+            delivery_date = c4.date_input("납품 예정일자")
+
+            st.markdown("<br><b>프레임 옵션</b>", unsafe_allow_html=True)
+            opt_cols = st.columns(3)
+            with opt_cols[0]: opt_clean = st.checkbox("클린부스")
+            with opt_cols[1]: opt_table = st.checkbox("테이블")
+            with opt_cols[2]: opt_jig = st.checkbox("전도방지지그")
+            frame_options = [opt for opt, checked in zip(["클린부스", "테이블", "전도방지지그"], [opt_clean, opt_table, opt_jig]) if checked]
+
+            st.markdown("<hr style='margin:15px 0;'>", unsafe_allow_html=True)
+            
+            spec_col1, spec_col2 = st.columns(2)
+            with spec_col1: exterior_spec = st.radio("외관 사양", ["SUS", "도장"], horizontal=True)
+            with spec_col2: interior_spec = st.radio("내부 사양", ["SUS", "도장"], horizontal=True)
+
+            notes_top = st.text_area("특이사항", placeholder="추가 전달 사항을 입력하세요", height=80)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            submitted = st.form_submit_button("프로젝트 등록", use_container_width=True)
 
             if submitted:
                 if not equipment: st.error("장비명은 필수 입력입니다.")
