@@ -160,7 +160,8 @@ def repair_project(p):
     return p
 
 def calc_progress(checks):
-    return sum(1 for c in checks.values() if c.get("status") == "확인") / 20
+    total_score = sum(5 if c.get("status") == "확인" else 2 if c.get("status") == "미비" else 0 for c in checks.values())
+    return total_score / 100
 
 def calc_score(checks):
     return sum(5 if c.get("status") == "확인" else 2 if c.get("status") == "미비" else 0 for c in checks.values())
@@ -324,12 +325,19 @@ else:
     st.sidebar.markdown(f"**환영합니다. {user['name']}님**")
     st.sidebar.markdown("---")
 
-    menu_options = ["프로젝트 보드", "납기 캘린더", "점검 기록", "체크리스트 추출"]
+    menu_options = ["ALL", "캘린더", "점검", "양식 추출"]
     if user["role"] == "admin":
-        menu_options.insert(1, "프로젝트 등록")
+        menu_options.insert(1, "신규 등록")
 
     menu = st.sidebar.radio("메뉴", menu_options, label_visibility="collapsed")
-    if menu != "점검 기록": st.session_state.inspection_project = None
+    
+    # Handle navigation from board/calendar to inspection
+    nav = st.query_params.get("nav", "")
+    if nav == "inspect" and st.session_state.inspection_project:
+        menu = "점검"
+        st.query_params.clear()
+    
+    if menu != "점검": st.session_state.inspection_project = None
 
     st.sidebar.markdown("---")
     if st.sidebar.button("로그아웃", use_container_width=True):
@@ -350,7 +358,7 @@ else:
     # ═══════════════════════════════════════════════════
     # 프로젝트 보드
     # ═══════════════════════════════════════════════════
-    if menu == "프로젝트 보드":
+    if menu == "ALL":
         col_title, col_stats = st.columns([5, 5])
         with col_title:
             st.markdown(f"""
@@ -366,7 +374,7 @@ else:
                     st.markdown(f"""
                     <div style="background-color:#fff3cd; border-left:5px solid #ffc107; padding:12px; border-radius:6px; margin-bottom:15px;">
                         <h4 style="margin:0; color:#856404; font-size:18px;">[안내] 납기 변경 요청 접수 ({len(pending_reqs)}건)</h4>
-                        <p style="margin:4px 0 0 0; font-size:14px; color:#856404;">업체에서 납기일 조율을 요청했습니다. '점검 기록' 메뉴에서 승인해주세요.</p>
+                        <p style="margin:4px 0 0 0; font-size:14px; color:#856404;">업체에서 납기일 조율을 요청했습니다. '점검' 메뉴에서 승인해주세요.</p>
                     </div>
                     """, unsafe_allow_html=True)
                 
@@ -481,18 +489,29 @@ else:
                     )
                     st.markdown(card_html, unsafe_allow_html=True)
                     
-                    if user["role"] == "admin" and not is_deliv:
-                        col1, col2 = st.columns([8, 2])
-                        if col2.button("납품 완료 처리", key=f"btn_done_{pid}", use_container_width=True):
-                            st.session_state.projects[pid]["info"]["is_delivered"] = True
-                            save_to_sheets(st.session_state.projects)
-                            st.session_state.flash_msg = f"✅ [{info.get('equipment')}] 납품 처리가 완료되었습니다!"
-                            st.rerun()
+                    if not is_deliv:
+                        col1, col2, col3 = st.columns([6, 2, 2])
+                        with col2:
+                            if st.button("📋 점검 보기", key=f"btn_inspect_{pid}", use_container_width=True):
+                                st.session_state.inspection_project = pid
+                                # Switch to inspection menu
+                                st.query_params["nav"] = "inspect"
+                                st.rerun()
+                        with col3:
+                            if user["role"] == "admin":
+                                if st.button("납품 완료 처리", key=f"btn_done_{pid}", use_container_width=True):
+                                    st.session_state.projects[pid]["info"]["is_delivered"] = True
+                                    save_to_sheets(st.session_state.projects)
+                                    st.session_state.flash_msg = f"✅ [{info.get('equipment')}] 납품 처리가 완료되었습니다!"
+                                    st.rerun()
+                    else:
+                        if user["role"] == "admin":
+                            pass  # Already delivered, no actions
 
     # ═══════════════════════════════════════════════════
     # 납기 캘린더
     # ═══════════════════════════════════════════════════
-    elif menu == "납기 캘린더":
+    elif menu == "캘린더":
         st.markdown(f"""
             <div style="font-size:34px; font-weight:800; color:#1e293b; margin-top:10px; margin-bottom:20px;">
                 {get_logo_html('34px')} 프로젝트 납기 캘린더
@@ -534,14 +553,20 @@ else:
                     for p in day_projs:
                         info = p.get("info", {})
                         pct = int(calc_progress(p.get("checks", {})) * 100)
+                        score = calc_score(p.get("checks", {}))
                         is_deliv = info.get("is_delivered", False)
                         
                         try: diff = (datetime.strptime(date_str, "%Y-%m-%d").date() - date.today()).days
                         except: diff = 99
                         
+                        # Color rules: delivered=grey, overdue or <=7days=red, else=blue
                         if is_deliv: badge_color = "#95a5a6"
+                        elif diff < 0: badge_color = "#e74c3c"
                         elif diff <= 7: badge_color = "#e74c3c"
                         else: badge_color = "#3b82f6"
+                        
+                        status_text = "납품완료" if is_deliv else f"납기 {abs(diff)}일 초과" if diff < 0 else f"D-{diff}"
+                        opts_text = f"옵션: {', '.join(info.get('frame_options', []))}<br>" if info.get('frame_options') else ""
                         
                         cell_content += f"""
                         <div style="background-color: {badge_color}; color: white; padding: 4px; border-radius: 4px; margin-bottom: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">
@@ -549,9 +574,12 @@ else:
                                 <summary style="font-size: 13px; font-weight:bold; cursor: pointer; outline: none; list-style: none;">
                                     {info.get('equipment')}
                                 </summary>
-                                <div style="font-size: 12px; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.3); padding-top: 4px; line-height: 1.4;">
+                                <div style="font-size: 12px; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.3); padding-top: 4px; line-height: 1.6;">
                                     업체: {info.get('company')}<br>
-                                    진척률: {pct}%
+                                    진척률: <b>{pct}%</b><br>
+                                    검사점수: <b>{score}/100</b><br>
+                                    {opts_text}
+                                    상태: {status_text}
                                 </div>
                             </details>
                         </div>
@@ -563,28 +591,67 @@ else:
         
         st.markdown(html_cal, unsafe_allow_html=True)
         
-        if user["role"] == "admin":
-            st.markdown("<br><br>", unsafe_allow_html=True)
-            st.subheader("납품 완료 간편 처리")
-            st.markdown("달력에서 현황을 확인한 후 아래에서 납품 완료 상태로 즉시 변경할 수 있습니다.")
+        # 해당 월 프로젝트 상세 + 납품완료 처리
+        st.markdown("<br>", unsafe_allow_html=True)
+        month_str = f"{year}-{month:02d}"
+        month_projs = {pid: p for pid, p in projects.items() if p.get('info', {}).get('delivery_date', '').startswith(month_str)}
+        
+        if month_projs:
+            st.markdown(f"### 📅 {year}년 {month}월 프로젝트 현황")
             
-            pending_projs = {pid: p for pid, p in projects.items() if not p.get("info", {}).get("is_delivered", False)}
-            if pending_projs:
-                format_fn = lambda pid: f"{pending_projs[pid]['info']['equipment']} ({pending_projs[pid]['info']['company']} / 납기: {pending_projs[pid]['info']['delivery_date']})"
-                selected_pid_to_complete = st.selectbox("완료 처리할 프로젝트를 선택하세요", list(pending_projs.keys()), format_func=format_fn)
+            for pid, p in sorted(month_projs.items(), key=lambda x: x[1].get('info', {}).get('delivery_date', '')):
+                info = p.get("info", {})
+                checks = p.get("checks", {})
+                pct = int(calc_progress(checks) * 100)
+                score = calc_score(checks)
+                is_deliv = info.get("is_delivered", False)
+                dd = info.get("delivery_date", "")
                 
-                if st.button("선택한 프로젝트 납품 완료 처리", type="primary"):
-                    st.session_state.projects[selected_pid_to_complete]["info"]["is_delivered"] = True
-                    save_to_sheets(st.session_state.projects)
-                    st.session_state.flash_msg = "✅ 납품 처리가 완료되었습니다."
-                    st.rerun()
-            else:
-                st.info("현재 납품 대기 중인 프로젝트가 없습니다.")
+                try: diff = (datetime.strptime(dd, "%Y-%m-%d").date() - date.today()).days
+                except: diff = 99
+                
+                if is_deliv:
+                    status_badge = '<span style="background:#95a5a6;color:white;padding:3px 10px;border-radius:12px;font-size:13px;">납품완료</span>'
+                elif diff < 0:
+                    status_badge = f'<span style="background:#e74c3c;color:white;padding:3px 10px;border-radius:12px;font-size:13px;">납기 {abs(diff)}일 초과</span>'
+                elif diff <= 7:
+                    status_badge = f'<span style="background:#e74c3c;color:white;padding:3px 10px;border-radius:12px;font-size:13px;">D-{diff}</span>'
+                else:
+                    status_badge = f'<span style="background:#3b82f6;color:white;padding:3px 10px;border-radius:12px;font-size:13px;">D-{diff}</span>'
+                
+                st.markdown(f"""
+                <div style="background:white;border-radius:10px;padding:14px 18px;margin-bottom:8px;border-left:4px solid {'#95a5a6' if is_deliv else '#e74c3c' if diff<=7 else '#3b82f6'};box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <div>
+                            <b style="font-size:17px;">{info.get('equipment')}</b>
+                            <span style="color:#666;font-size:14px;margin-left:8px;">({info.get('company')})</span>
+                        </div>
+                        <div>{status_badge}</div>
+                    </div>
+                    <div style="font-size:14px;color:#666;margin-top:6px;">
+                        납품: {dd} │ 진척률: <b>{pct}%</b> │ 점수: <b>{score}/100</b>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                if user["role"] == "admin" and not is_deliv:
+                    col_a, col_b, col_c = st.columns([5, 2.5, 2.5])
+                    with col_b:
+                        if st.button("📋 점검 보기", key=f"cal_inspect_{pid}", use_container_width=True):
+                            st.session_state.inspection_project = pid
+                            st.query_params["nav"] = "inspect"
+                            st.rerun()
+                    with col_c:
+                        if st.button("✅ 납품완료", key=f"cal_done_{pid}", use_container_width=True):
+                            st.session_state.projects[pid]["info"]["is_delivered"] = True
+                            save_to_sheets(st.session_state.projects)
+                            st.session_state.flash_msg = f"✅ [{info.get('equipment')}] 납품 처리 완료!"
+                            st.rerun()
 
     # ═══════════════════════════════════════════════════
     # 프로젝트 등록 (중복 방지 & 팝업 시스템 완벽 탑재!)
     # ═══════════════════════════════════════════════════
-    elif menu == "프로젝트 등록" and user["role"] == "admin":
+    elif menu == "신규 등록" and user["role"] == "admin":
         st.markdown(f"""
             <div style="font-size:34px; font-weight:800; color:#1e293b; margin-top:10px; margin-bottom:20px;">
                 {get_logo_html('34px')} 신규 프로젝트 등록
@@ -646,9 +713,9 @@ else:
                         st.error(f"등록 중 오류 발생: {e}")
 
     # ═══════════════════════════════════════════════════
-    # 점검 기록
+    # 점검
     # ═══════════════════════════════════════════════════
-    elif menu == "점검 기록":
+    elif menu == "점검":
         if not projects: st.info("점검할 프로젝트가 없습니다.")
         else:
             active_projects = {pid: p for pid, p in projects.items() if not p.get("info", {}).get("is_delivered", False)}
@@ -807,7 +874,7 @@ else:
     # ═══════════════════════════════════════════════════
     # 체크리스트 추출
     # ═══════════════════════════════════════════════════
-    elif menu == "체크리스트 추출":
+    elif menu == "양식 추출":
         st.markdown(f"""
             <div style="font-size:34px; font-weight:800; color:#1e293b; margin-top:10px; margin-bottom:20px;">
                 {get_logo_html('34px')} 엑셀 양식 일괄 추출
@@ -855,9 +922,13 @@ else:
                 selected_pids = edited_df[edited_df["선택"] == True]["pid"].tolist()
                 
                 if selected_pids:
-                    st.success(f"총 {len(selected_pids)}개의 프로젝트가 선택되었습니다. 아래 버튼을 눌러 개별 다운로드하세요.")
                     today_str = date.today().strftime('%Y%m%d')
                     
+                    st.success(f"총 {len(selected_pids)}개 선택됨")
+                    st.markdown("")
+                    
+                    # 개별 다운로드 버튼들
+                    st.markdown("#### 📥 개별 다운로드")
                     for pid in selected_pids:
                         proj = projects.get(pid)
                         if not proj: continue
@@ -865,11 +936,37 @@ else:
                         filename = f"Frame_점검표_{proj.get('info', {}).get('company', '')}_{proj.get('info', {}).get('equipment', '')}_{today_str}.xlsx"
                         
                         st.download_button(
-                            label=f"[{proj.get('info', {}).get('equipment', '')}] 점검표 다운로드",
+                            label=f"📥 {proj.get('info', {}).get('equipment', '')} ({proj.get('info', {}).get('company', '')})",
                             data=excel_data.getvalue(),
                             file_name=filename,
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
-                            key=f"dl_btn_{pid}"
+                            key=f"dl_btn_{pid}",
+                            use_container_width=True
+                        )
+                    
+                    # 2개 이상일 때만 ZIP 일괄 다운로드 옵션 제공
+                    if len(selected_pids) >= 2:
+                        st.markdown("---")
+                        st.markdown("#### 📦 일괄 다운로드 (ZIP)")
+                        st.caption("여러 파일을 한번에 받고 싶으면 아래 버튼을 사용하세요.")
+                        
+                        zip_buffer = io.BytesIO()
+                        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+                            for pid in selected_pids:
+                                proj = projects.get(pid)
+                                if not proj: continue
+                                excel_data = generate_checklist_excel(proj)
+                                filename = f"Frame_점검표_{proj.get('info', {}).get('company', '')}_{proj.get('info', {}).get('equipment', '')}_{today_str}.xlsx"
+                                zf.writestr(filename, excel_data.getvalue())
+                        zip_buffer.seek(0)
+                        
+                        st.download_button(
+                            label=f"📦 {len(selected_pids)}개 파일 ZIP 다운로드",
+                            data=zip_buffer.getvalue(),
+                            file_name=f"Frame_점검표_일괄_{today_str}.zip",
+                            mime="application/zip",
+                            key="dl_zip_all",
+                            use_container_width=True
                         )
                 else:
                     st.info("위 표에서 다운로드할 프로젝트의 '선택' 칸을 체크해주세요.")
