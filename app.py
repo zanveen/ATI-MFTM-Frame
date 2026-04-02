@@ -12,8 +12,11 @@ from datetime import datetime, date, timedelta
 from pathlib import Path
 from openpyxl import load_workbook
 import io
+from PIL import Image
 
 # ─── 설정 ───
+logo = Image.open("ati_logo.png")
+
 st.set_page_config(
     page_title="Frame 제작 현황 관리",
     page_icon=logo,
