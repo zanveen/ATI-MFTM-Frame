@@ -12,14 +12,10 @@ from datetime import datetime, date, timedelta
 from pathlib import Path
 from openpyxl import load_workbook
 import io
-from PIL import Image
 
 # ─── 설정 ───
-logo = Image.open("ati_logo.png")
-
 st.set_page_config(
-    page_title="Frame 제작 현황 관리",
-    page_icon=logo,
+    page_title="Frame 제작 진행현황 관리",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -102,7 +98,7 @@ def load_from_sheets():
                     "notes_top": str(row.get('notes_top', '')),
                     "delivery_delay_count": int(row.get('delivery_delay_count', 0)) if row.get('delivery_delay_count') else 0,
                     "delay_request": json.loads(row.get('delay_request', '{}')) if row.get('delay_request') else {},
-                    "is_delivered": bool(row.get('is_delivered', False))
+                    "is_delivered": str(row.get('is_delivered', '')).upper() in ('TRUE', '1', 'YES')
                 },
                 "checks": json.loads(row.get('checks', '{}')) if row.get('checks') else {},
                 "special_notes": str(row.get('special_notes', '')),
@@ -498,16 +494,15 @@ else:
                     st.markdown(card_html, unsafe_allow_html=True)
                     
                     if not is_deliv:
-                        col1, col2, col3 = st.columns([6, 2, 2])
+                        col1, col2, col3 = st.columns([7, 1.5, 1.5])
                         with col2:
-                            if st.button("📋 점검 보기", key=f"btn_inspect_{pid}", use_container_width=True):
+                            if st.button("📋 점검", key=f"btn_inspect_{pid}", use_container_width=True):
                                 st.session_state.inspection_project = pid
-                                # Switch to inspection menu
                                 st.query_params["nav"] = "inspect"
                                 st.rerun()
                         with col3:
                             if user["role"] == "admin":
-                                if st.button("납품 완료 처리", key=f"btn_done_{pid}", use_container_width=True):
+                                if st.button("✅ 납품완료", key=f"btn_done_{pid}", use_container_width=True):
                                     st.session_state.projects[pid]["info"]["is_delivered"] = True
                                     save_to_sheets(st.session_state.projects)
                                     st.session_state.flash_msg = f"✅ [{info.get('equipment')}] 납품 처리가 완료되었습니다!"
@@ -702,7 +697,7 @@ else:
             notes_top = st.text_area("특이사항", placeholder="추가 전달 사항을 입력하세요", height=80)
             
             st.markdown("<br>", unsafe_allow_html=True)
-            submitted = st.form_submit_button("프로젝트 등록", use_container_width=True)
+            submitted = st.form_submit_button("구글 시트에 프로젝트 등록", use_container_width=True)
 
             if submitted:
                 if not equipment: st.error("장비명은 필수 입력입니다.")
@@ -836,7 +831,7 @@ else:
                                     proj["info"]["delivery_date"] = str(new_date_admin)
                                     proj["info"]["delivery_delay_count"] = info.get("delivery_delay_count", 0) + 1
                                     save_to_sheets(st.session_state.projects)
-                                    st.session_state.flash_msg = "✅ 납기일이 변경되었습니다!"
+                                    st.session_state.flash_msg = "✅ 구글 시트에 납기일이 변경되었습니다!"
                                     st.rerun()
 
                 st.markdown("---")
@@ -849,10 +844,45 @@ else:
                     </div>
                     <p style="margin:4px 0;font-size:17px;">
                         <b>업체:</b> {info.get('company')} │ <b>납품일:</b> <span style="color:#e74c3c;font-weight:bold;">{info.get('delivery_date')}</span> (납기변경 누적 {info.get('delivery_delay_count', 0)}회) │
-                        <b>진척률:</b> {int(calc_progress(checks)*100)}%
+                        <b>진척률:</b> {int(calc_progress(checks)*100)}%<br>
+                        <b>외관:</b> {info.get('exterior_spec','')} │ <b>내부:</b> {info.get('interior_spec','')} │ <b>파트:</b> {info.get('frame_parts','')}덩어리
                     </p>
                 </div>
                 """, unsafe_allow_html=True)
+
+                # 관리자: 프로젝트 사양 편집
+                if user["role"] == "admin":
+                    with st.expander("✏️ 프로젝트 정보 수정"):
+                        with st.form(f"edit_info_{pid}", clear_on_submit=False):
+                            edit_c1, edit_c2 = st.columns(2)
+                            with edit_c1:
+                                edit_equipment = st.text_input("장비명", value=info.get("equipment", ""))
+                                edit_company = st.radio("업체명", ["한울산업", "정한테크"], index=0 if info.get("company") == "한울산업" else 1, horizontal=True)
+                                edit_parts = st.select_slider("Frame Part 수", options=list(range(1, 11)), value=int(info.get("frame_parts", 1)))
+                            with edit_c2:
+                                edit_ext = st.radio("외관 사양", ["SUS", "도장"], index=0 if info.get("exterior_spec") == "SUS" else 1, horizontal=True)
+                                edit_int = st.radio("내부 사양", ["SUS", "도장"], index=0 if info.get("interior_spec") == "SUS" else 1, horizontal=True, key=f"edit_int_{pid}")
+                            
+                            st.markdown("**프레임 옵션**")
+                            eo_cols = st.columns(3)
+                            cur_opts = info.get("frame_options", [])
+                            with eo_cols[0]: eo_clean = st.checkbox("클린부스", value="클린부스" in cur_opts, key=f"eo_c_{pid}")
+                            with eo_cols[1]: eo_table = st.checkbox("테이블", value="테이블" in cur_opts, key=f"eo_t_{pid}")
+                            with eo_cols[2]: eo_jig = st.checkbox("전도방지지그", value="전도방지지그" in cur_opts, key=f"eo_j_{pid}")
+                            
+                            edit_notes = st.text_area("특이사항", value=info.get("notes_top", ""), height=60)
+                            
+                            if st.form_submit_button("변경사항 저장", use_container_width=True):
+                                proj["info"]["equipment"] = edit_equipment
+                                proj["info"]["company"] = edit_company
+                                proj["info"]["frame_parts"] = edit_parts
+                                proj["info"]["exterior_spec"] = edit_ext
+                                proj["info"]["interior_spec"] = edit_int
+                                proj["info"]["frame_options"] = [o for o, c in zip(["클린부스", "테이블", "전도방지지그"], [eo_clean, eo_table, eo_jig]) if c]
+                                proj["info"]["notes_top"] = edit_notes
+                                save_to_sheets(st.session_state.projects)
+                                st.session_state.flash_msg = "✅ 프로젝트 정보가 수정되었습니다!"
+                                st.rerun()
 
                 check_date = st.date_input("당일 점검 일자 지정", value=date.today(), key="cd")
                 updated_checks = copy.deepcopy(checks)
@@ -880,7 +910,7 @@ else:
                     if "history" not in proj: proj["history"] = []
                     proj["history"].append({"date": str(check_date), "progress": int(calc_progress(updated_checks) * 100), "score": calc_score(updated_checks), "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M")})
                     save_to_sheets(st.session_state.projects)
-                    st.success("✅ 점검 결과가 저장되었습니다.")
+                    st.success("✅ 구글 시트에 점검 결과가 저장되었습니다.")
 
                 if proj.get("history"):
                     st.markdown("### 점검 히스토리")
