@@ -77,7 +77,7 @@ def load_from_sheets():
     try:
         client = get_gspread_client()
         sh = client.open("Frame_Data")
-        worksheet = sh.sheet1 # 에러의 원인이었던 부분 완벽 수정!!
+        worksheet = sh.sheet1 
         all_records = worksheet.get_all_records()
         
         projects = {}
@@ -103,7 +103,6 @@ def load_from_sheets():
             }
         return projects
     except Exception as e:
-        # 시트가 비어있거나 처음 실행될 때 무시하고 빈 딕셔너리 반환
         return {}
 
 def save_to_sheets(projects):
@@ -131,13 +130,30 @@ def save_to_sheets(projects):
         worksheet.clear()
         try:
             worksheet.update(values=data_to_save, range_name='A1')
-        except TypeError: # 호환성 처리
+        except TypeError: 
             worksheet.update('A1', data_to_save)
             
     except Exception as e:
         st.error(f"구글 시트 저장 실패: {e}")
 
 # ─── 계산 및 유틸 함수 ───
+def repair_project(p):
+    if not isinstance(p, dict): p = {}
+    if "info" not in p: p["info"] = {}
+    info = p["info"]
+    info.setdefault("company", "미상")
+    info.setdefault("equipment", "알수없음")
+    info.setdefault("delivery_date", "")
+    info.setdefault("delivery_delay_count", 0)
+    info.setdefault("frame_parts", 1)
+    info.setdefault("frame_options", [])
+    if "delay_request" not in info or not isinstance(info["delay_request"], dict):
+        info["delay_request"] = {}
+    if "checks" not in p: p["checks"] = {}
+    if "history" not in p: p["history"] = []
+    if "special_notes" not in p: p["special_notes"] = ""
+    return p
+
 def calc_progress(checks):
     return sum(1 for c in checks.values() if c.get("status") == "확인") / 20
 
@@ -239,13 +255,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ─── 세션 초기화 및 시트 로드 ───
+# ─── 세션 초기화 및 시트 로드 (에러 절대 방지) ───
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "user_info" not in st.session_state: st.session_state.user_info = None
 if "dashboard_filter" not in st.session_state: st.session_state.dashboard_filter = "전체"
 if "inspection_project" not in st.session_state: st.session_state.inspection_project = None
 
-if "projects" not in st.session_state or not st.session_state.projects:
+if "projects" not in st.session_state:
     st.session_state.projects = load_from_sheets()
 
 # ═══════════════════════════════════════════════════
@@ -267,7 +283,7 @@ if not st.session_state.logged_in:
             if pwd in USER_CREDENTIALS:
                 st.session_state.logged_in = True
                 st.session_state.user_info = USER_CREDENTIALS[pwd]
-                st.session_state.projects = load_from_sheets() # 시트 최신화
+                st.session_state.projects = load_from_sheets() 
                 st.rerun()
             else:
                 st.error("비밀번호가 일치하지 않습니다.")
@@ -301,6 +317,9 @@ else:
         st.session_state.logged_in = False
         st.session_state.user_info = None
         st.rerun()
+        
+    st.sidebar.markdown("<br>", unsafe_allow_html=True)
+    st.sidebar.caption("v2.0 (구글시트 완벽연동)")
         
     projects = filter_projects_by_role(st.session_state.projects, user)
 
@@ -424,14 +443,16 @@ else:
                     opts_html = f'<span style="background:#eff6ff; color:#3b82f6; padding:4px 12px; border-radius:20px; font-size:14px; font-weight:700; border:1px solid #bfdbfe; margin-left:15px;">옵션: {", ".join(info.get("frame_options", []))}</span>' if info.get("frame_options") else ''
                     delay_text = f" &nbsp;│ <span style='color:#e74c3c;font-weight:bold;'>납기변경 {delay_cnt}회</span>" if delay_cnt > 0 else ""
 
-                    st.markdown(f"""
+                    card_html = f"""
                     <div class="project-card">
-                        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap; margin-bottom:10px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
                             <div style="display:flex; align-items:center;">
-                                <h3 style="margin:0;">🔩 {info.get('equipment', pid)}</h3>{opts_html}
+                                <h3 style="margin:0;">🔩 {info.get('equipment', pid)}</h3>
+                                {opts_html}
                             </div>
                             <div style="display:flex; align-items:center; gap:10px;">
-                                {badge}<span>{days_text}</span>
+                                {badge} 
+                                <span>{days_text}</span>
                             </div>
                         </div>
                         <p style="margin-top:5px; color:#475569;">업체: <b style="color:#1e293b;">{info.get('company','-')}</b> │ 납품예정: {dd} │ 검사점수: <b>{score}/100</b> {delay_text}</p>
@@ -439,10 +460,11 @@ else:
                             <div class="progress-bar-fill" style="width:{max(pct,3)}%;background:{bar_color};">{pct}%</div>
                         </div>
                     </div>
-                    """, unsafe_allow_html=True)
+                    """
+                    st.markdown(card_html, unsafe_allow_html=True)
 
     # ═══════════════════════════════════════════════════
-    # 📅 납기 캘린더 (HTML 기반 실제 달력)
+    # 📅 납기 캘린더
     # ═══════════════════════════════════════════════════
     elif menu == "📅 납기 캘린더":
         st.markdown(f"""
@@ -453,24 +475,20 @@ else:
         st.markdown("달력에서 프로젝트별 납품 예정일을 한눈에 확인하세요.")
         st.markdown("---")
 
-        # 년도 및 월 선택 UI
         today = date.today()
         col_y, col_m, _ = st.columns([2, 2, 6])
         year = col_y.selectbox("년도", range(today.year - 1, today.year + 3), index=1)
         month = col_m.selectbox("월", range(1, 13), index=today.month - 1)
 
-        # 달력 생성을 위한 HTML/CSS
         cal = calendar.monthcalendar(year, month)
         html_cal = '<table style="width:100%; border-collapse: collapse; background:white; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-radius:10px; overflow:hidden;">'
         
-        # 요일 헤더
         html_cal += '<tr>'
         for day_name in ["월", "화", "수", "목", "금", "토", "일"]:
             color = "#e74c3c" if day_name == "일" else "#3b82f6" if day_name == "토" else "#333"
             html_cal += f'<th style="border: 1px solid #e2e8f0; padding: 12px; text-align: center; background-color: #f8fafc; font-size:18px; color:{color};">{day_name}</th>'
         html_cal += '</tr>'
         
-        # 달력 날짜 채우기
         for week in cal:
             html_cal += '<tr>'
             for idx, day in enumerate(week):
@@ -483,11 +501,7 @@ else:
                     day_color = "#e74c3c" if idx == 6 else "#3b82f6" if idx == 5 else "#333"
                     weight = "900" if is_today else "bold"
                     
-                    # 해당 날짜에 납품인 프로젝트 찾기
-                    day_projs = []
-                    for pid, p in projects.items():
-                        if p['info']['delivery_date'] == date_str:
-                            day_projs.append(p)
+                    day_projs = [p for p in projects.values() if p['info']['delivery_date'] == date_str]
                     
                     cell_content = f'<div style="font-weight: {weight}; font-size: 18px; margin-bottom: 8px; color: {day_color};">{day}{" (오늘)" if is_today else ""}</div>'
                     
@@ -503,7 +517,7 @@ else:
         st.markdown(html_cal, unsafe_allow_html=True)
 
     # ═══════════════════════════════════════════════════
-    # ➕ 프로젝트 등록 (관리자 전용 / 배치 수정)
+    # ➕ 프로젝트 등록
     # ═══════════════════════════════════════════════════
     elif menu == "➕ 프로젝트 등록" and user["role"] == "admin":
         st.markdown(f"""
@@ -517,7 +531,6 @@ else:
             company = st.radio("업체명 *", ["한울산업", "정한테크"], horizontal=True)
             equipment = st.text_input("장비명 (설비명) *", placeholder="예: PALM2")
             
-            # 🔥 레이아웃 수정: 발주일과 덩어리 수 나란히 배치 🔥
             col_d1, col_d2, _ = st.columns([2, 2, 4])
             with col_d1: order_date = st.date_input("발주일")
             with col_d2: frame_parts = st.number_input("Frame Part 수 (덩어리) *", min_value=1, value=1, step=1)
@@ -543,21 +556,24 @@ else:
             if submitted:
                 if not equipment: st.error("장비명은 필수 입력입니다.")
                 else:
-                    pid = f"{company}_{equipment}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                    st.session_state.projects[pid] = repair_project({
-                        "info": {
-                            "company": company, "equipment": equipment, "order_date": str(order_date),
-                            "delivery_date": str(delivery_date), "frame_parts": frame_parts,
-                            "frame_options": frame_options, "exterior_spec": exterior_spec,
-                            "interior_spec": interior_spec, "notes_top": notes_top,
-                            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                            "delivery_delay_count": 0, "delay_request": {}
-                        },
-                        "checks": {}, "special_notes": "", "history": []
-                    })
-                    save_to_sheets(st.session_state.projects)
-                    st.success("✅ 구글 시트에 안전하게 등록되었습니다!")
-                    st.rerun()
+                    try:
+                        pid = f"{company}_{equipment}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                        st.session_state.projects[pid] = repair_project({
+                            "info": {
+                                "company": company, "equipment": equipment, "order_date": str(order_date),
+                                "delivery_date": str(delivery_date), "frame_parts": frame_parts,
+                                "frame_options": frame_options, "exterior_spec": exterior_spec,
+                                "interior_spec": interior_spec, "notes_top": notes_top,
+                                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                "delivery_delay_count": 0, "delay_request": {}
+                            },
+                            "checks": {}, "special_notes": "", "history": []
+                        })
+                        save_to_sheets(st.session_state.projects)
+                        st.success("✅ 구글 시트에 안전하게 등록되었습니다!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"등록 중 오류 발생: {e}")
 
     # ═══════════════════════════════════════════════════
     # 📋 점검 기록
@@ -714,7 +730,7 @@ else:
                     st.dataframe(pd.DataFrame(proj["history"])[["date", "progress", "score"]].rename(columns={"date":"점검일", "progress":"진척률(%)", "score":"점수"}), use_container_width=True, hide_index=True)
 
     # ═══════════════════════════════════════════════════
-    # 📥 체크리스트 추출 (다중 선택 및 ZIP 일괄 다운로드 기능)
+    # 📥 체크리스트 추출
     # ═══════════════════════════════════════════════════
     elif menu == "📥 체크리스트 추출":
         st.markdown(f"""
@@ -726,7 +742,6 @@ else:
         
         if not projects: st.info("추출할 프로젝트가 없습니다.")
         else:
-            # 1. 월별 조회 필터
             months = sorted(list(set(p['info']['delivery_date'][:7] for p in projects.values() if p['info']['delivery_date'])), reverse=True)
             col_filter, _ = st.columns([3, 7])
             selected_month = col_filter.selectbox("📅 조회 기간 선택 (년/월)", ["전체"] + months)
@@ -738,7 +753,6 @@ else:
             else:
                 st.markdown("### ✅ 다운로드할 프로젝트를 선택하세요")
                 
-                # 2. 데이터 프레임을 이용한 직관적인 체크박스 선택 UI
                 df_data = []
                 for pid, p in filtered_projs.items():
                     df_data.append({
@@ -751,25 +765,22 @@ else:
                     })
                 df = pd.DataFrame(df_data)
                 
-                # 사용자가 체크박스로 선택할 수 있도록 데이터 에디터 제공
                 edited_df = st.data_editor(
                     df,
                     column_config={
                         "선택": st.column_config.CheckboxColumn("선택", default=False),
-                        "pid": None  # pid 컬럼은 화면에서 숨김
+                        "pid": None
                     },
                     disabled=["장비명", "업체", "납기일", "진척률"],
                     hide_index=True,
                     use_container_width=True
                 )
                 
-                # 선택된 프로젝트 PID 추출
                 selected_pids = edited_df[edited_df["선택"] == True]["pid"].tolist()
                 
                 if selected_pids:
                     st.success(f"총 {len(selected_pids)}개의 프로젝트가 선택되었습니다.")
                     
-                    # 3. ZIP 파일 생성 로직
                     zip_buffer = io.BytesIO()
                     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
                         for pid in selected_pids:
