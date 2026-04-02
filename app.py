@@ -297,7 +297,9 @@ if not st.session_state.logged_in:
             </div>
             <p style="color:#666; margin-bottom:30px;">비밀번호를 입력해주세요.</p>
         """, unsafe_allow_html=True)
-        pwd = st.text_input("비밀번호", type="password", label_visibility="collapsed")
+        _, pwd_col, _ = st.columns([1, 2, 1])
+        with pwd_col:
+            pwd = st.text_input("비밀번호", type="password", label_visibility="collapsed")
         st.markdown("<br>", unsafe_allow_html=True)
         login_col1, login_col2, login_col3 = st.columns([1, 2, 1])
         with login_col2:
@@ -586,15 +588,14 @@ else:
         
         if all_month_projs:
             st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("#### 📌 프로젝트 상세 보기")
+            st.markdown(f"#### 📅 {year}년 {month}월 프로젝트 현황 ({len(all_month_projs)}건)")
             
-            proj_options = {pid: f"{p.get('info',{}).get('equipment','')} ({p.get('info',{}).get('company','')}) - 납기: {p.get('info',{}).get('delivery_date','')}" for pid, p in all_month_projs}
-            selected_cal_pid = st.selectbox("프로젝트 선택", list(proj_options.keys()), format_func=lambda x: proj_options[x], label_visibility="collapsed")
+            # 날짜순 정렬
+            all_month_projs.sort(key=lambda x: x[1].get('info', {}).get('delivery_date', ''))
             
-            if selected_cal_pid:
-                sp = projects.get(selected_cal_pid, {})
-                sp_info = sp.get("info", {})
-                sp_checks = sp.get("checks", {})
+            for pid_item, p in all_month_projs:
+                sp_info = p.get("info", {})
+                sp_checks = p.get("checks", {})
                 sp_pct = int(calc_progress(sp_checks) * 100)
                 sp_score = calc_score(sp_checks)
                 sp_deliv = sp_info.get("is_delivered", False)
@@ -603,28 +604,29 @@ else:
                 try: sp_diff = (datetime.strptime(sp_dd, "%Y-%m-%d").date() - today).days
                 except: sp_diff = 99
                 
-                if sp_deliv: sp_status = "✅ 납품완료"
-                elif sp_diff < 0: sp_status = f"⚠️ 납기 {abs(sp_diff)}일 초과"
-                elif sp_diff <= 7: sp_status = f"⏰ D-{sp_diff}"
-                else: sp_status = f"D-{sp_diff}"
+                if sp_deliv: sp_status_txt = "납품완료"
+                elif sp_diff < 0: sp_status_txt = f"납기 {abs(sp_diff)}일 초과"
+                elif sp_diff <= 7: sp_status_txt = f"D-{sp_diff}"
+                else: sp_status_txt = f"D-{sp_diff}"
                 
-                opts_text = f"옵션: {', '.join(sp_info.get('frame_options', []))}" if sp_info.get('frame_options') else ""
+                border_color = "#95a5a6" if sp_deliv else "#e74c3c" if sp_diff <= 7 else "#3b82f6"
+                opts_str = f"  [옵션: {', '.join(sp_info.get('frame_options', []))}]" if sp_info.get('frame_options') else ""
                 
-                with st.expander(f"📋 {sp_info.get('equipment')} 상세 정보", expanded=True):
-                    st.markdown(f"""
-                    <div style="background:#f8f9fa; padding:16px; border-radius:10px; line-height:2;">
-                        <b style="font-size:20px;">🔩 {sp_info.get('equipment')}</b><br>
-                        <b>업체:</b> {sp_info.get('company')} &nbsp;│&nbsp;
-                        <b>납품예정:</b> {sp_dd} &nbsp;│&nbsp;
-                        <b>상태:</b> {sp_status}<br>
-                        <b>진척률:</b> {sp_pct}% &nbsp;│&nbsp;
-                        <b>검사점수:</b> {sp_score}/100<br>
-                        {'<b>' + opts_text + '</b><br>' if opts_text else ''}
-                        <b>외관:</b> {sp_info.get('exterior_spec','')} &nbsp;│&nbsp;
-                        <b>내부:</b> {sp_info.get('interior_spec','')} &nbsp;│&nbsp;
-                        <b>파트:</b> {sp_info.get('frame_parts','')}덩어리
-                    </div>
-                    """, unsafe_allow_html=True)
+                expander_label = f"{'✅' if sp_deliv else '🔩'} {sp_info.get('equipment','')} ({sp_info.get('company','')}) │ 납기: {sp_dd} │ {sp_status_txt}"
+                
+                with st.expander(expander_label, expanded=False):
+                    # 상세 정보 - st.write 사용 (HTML 렌더링 문제 회피)
+                    info_col1, info_col2 = st.columns(2)
+                    with info_col1:
+                        st.write(f"**장비명:** {sp_info.get('equipment','')}")
+                        st.write(f"**업체:** {sp_info.get('company','')}")
+                        st.write(f"**납품예정:** {sp_dd}")
+                        st.write(f"**상태:** {sp_status_txt}")
+                    with info_col2:
+                        st.write(f"**진척률:** {sp_pct}%")
+                        st.write(f"**검사점수:** {sp_score}/100")
+                        st.write(f"**외관:** {sp_info.get('exterior_spec','')} │ **내부:** {sp_info.get('interior_spec','')}")
+                        st.write(f"**파트:** {sp_info.get('frame_parts','')}덩어리{opts_str}")
                     
                     # 대분류별 진척
                     cat_progress = {}
@@ -643,17 +645,16 @@ else:
                             st.metric(cat, f"{data['done']}/{data['total']}", f"{cp}%")
                     
                     if not sp_deliv:
-                        st.markdown("")
                         btn_col1, btn_col2 = st.columns(2)
                         with btn_col1:
-                            if st.button("📋 점검 페이지로 이동", key=f"cal_go_inspect_{selected_cal_pid}", use_container_width=True):
-                                st.session_state.inspection_project = selected_cal_pid
+                            if st.button("📋 점검 페이지로 이동", key=f"cal_go_{pid_item}", use_container_width=True):
+                                st.session_state.inspection_project = pid_item
                                 st.query_params["nav"] = "inspect"
                                 st.rerun()
                         with btn_col2:
                             if user["role"] == "admin":
-                                if st.button("✅ 납품 완료 처리", key=f"cal_deliver_{selected_cal_pid}", use_container_width=True, type="primary"):
-                                    st.session_state.projects[selected_cal_pid]["info"]["is_delivered"] = True
+                                if st.button("✅ 납품 완료 처리", key=f"cal_dv_{pid_item}", use_container_width=True, type="primary"):
+                                    st.session_state.projects[pid_item]["info"]["is_delivered"] = True
                                     save_to_sheets(st.session_state.projects)
                                     st.session_state.flash_msg = f"✅ [{sp_info.get('equipment')}] 납품 처리 완료!"
                                     st.rerun()
@@ -903,13 +904,17 @@ else:
             if not filtered_projs:
                 st.warning("해당 기간에 해당하는 프로젝트가 없습니다.")
             else:
-                st.markdown("### 추출할 프로젝트를 선택하세요")
+                col_title, col_check = st.columns([6, 2])
+                with col_title:
+                    st.markdown("### 추출할 프로젝트를 선택하세요")
+                with col_check:
+                    select_all = st.checkbox("전체 선택", key="select_all_extract")
                 
                 df_data = []
                 for pid, p in filtered_projs.items():
                     info = p.get('info', {})
                     df_data.append({
-                        "선택": False,
+                        "선택": select_all,
                         "pid": pid,
                         "장비명": info.get('equipment', ''),
                         "업체": info.get('company', ''),
