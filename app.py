@@ -947,7 +947,7 @@ else:
                                     proj["info"]["delivery_delay_count"] = info.get("delivery_delay_count", 0) + 1
                                     proj["info"]["delay_total_biz_days"] = info.get("delay_total_biz_days", 0) + biz_days
                                     save_to_sheets(st.session_state.projects)
-                                    st.session_state.flash_msg = "✅ 구글 시트에 납기일이 변경되었습니다!"
+                                    st.session_state.flash_msg = "✅ 납기일이 변경되었습니다!"
                                     st.rerun()
 
                 st.markdown("---")
@@ -1025,7 +1025,7 @@ else:
                     if "history" not in proj: proj["history"] = []
                     proj["history"].append({"date": str(check_date), "progress": int(calc_progress(updated_checks) * 100), "score": calc_score(updated_checks), "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M")})
                     save_to_sheets(st.session_state.projects)
-                    st.success("✅ 구글 시트에 점검 결과가 저장되었습니다.")
+                    st.success("✅ 점검 결과가 저장되었습니다.")
 
                 if proj.get("history"):
                     st.markdown("### 점검 히스토리")
