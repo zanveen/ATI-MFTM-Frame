@@ -264,9 +264,14 @@ st.markdown("""
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] span { font-size: 18px !important; line-height: 1.8 !important; }
     
     /* 🔥 사이드바 메뉴 탭(박스) 형식 예쁜 UI & 100% 폭 맞춤 완벽 적용 🔥 */
+    [data-testid="stSidebar"] div[data-testid="stRadio"], 
     [data-testid="stSidebar"] div[role="radiogroup"] { 
-        width: 100%; 
+        width: 100% !important; 
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important; /* 자식 요소 100% 꽉 채우기 */
     }
+    [data-testid="stSidebar"] div[role="radiogroup"] { gap: 8px; }
     [data-testid="stSidebar"] div[role="radiogroup"] > label {
         width: 100% !important;
         display: flex !important;
@@ -308,7 +313,7 @@ st.markdown("""
     .badge-red { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     .badge-blue { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
 
-    /* 🔥 대시보드 통짜 버튼 디자인 (Primary 속성만 타겟팅하여 타 버튼 오작동 완벽 차단) 🔥 */
+    /* 대시보드 통짜 버튼 디자인 */
     div[data-testid="stHorizontalBlock"] button[kind="primary"] {
         height: 120px !important; 
         border-radius: 12px !important; 
@@ -333,14 +338,12 @@ st.markdown("""
         line-height: 1.4 !important;
         width: 100% !important;
     }
-    /* 기본 숫자 색상: 검은색 강제 고정 */
     div[data-testid="stHorizontalBlock"] button[kind="primary"] p::first-line {
         color: #000000 !important; 
         font-size: 42px !important; 
         font-weight: 900 !important; 
         line-height: 1.2 !important;
     }
-    /* 납기임박(4번째) 컬럼 숫자만 빨간색 고정 */
     div[data-testid="column"]:nth-of-type(4) button[kind="primary"] p::first-line { 
         color: #e74c3c !important; 
     }
@@ -494,7 +497,6 @@ else:
                 ("납기임박", len(urgent_pids), "납기임박"),
             ]
             
-            # 🔥 대시보드 4개 메인 버튼 UI/선택 효과 적용 🔥
             metric_cols = st.columns(4)
             for i, (key, num, label) in enumerate(filters_data):
                 with metric_cols[i]:
@@ -588,7 +590,7 @@ else:
                                 st.rerun()
 
     # ═══════════════════════════════════════════════════
-    # 📅 캘린더 (리얼 달력 디자인 & 팝업 적용 완료)
+    # 📅 캘린더
     # ═══════════════════════════════════════════════════
     elif menu == "📅 캘린더":
         
