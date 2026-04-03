@@ -344,8 +344,45 @@ st.markdown("""
         font-weight: 900 !important; 
         line-height: 1.2 !important;
     }
-    div[data-testid="column"]:nth-of-type(4) button[kind="primary"] p::first-line { 
+    /* 납기임박(4번째 컬럼) 숫자 빨간색 - 다중 셀렉터로 호환성 강화 */
+    div[data-testid="stHorizontalBlock"] > div:nth-child(4) button[kind="primary"] p::first-line,
+    div[data-testid="column"]:nth-of-type(4) button[kind="primary"] p::first-line,
+    div[data-testid="stColumn"]:nth-child(4) button[kind="primary"] p::first-line { 
         color: #e74c3c !important; 
+    }
+
+    /* 사이드바 로그아웃 버튼 → 메뉴 항목과 동일한 너비/스타일 */
+    [data-testid="stSidebar"] [data-testid="stButton"] {
+        width: 100% !important;
+        box-sizing: border-box !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stButton"] > button {
+        width: 100% !important;
+        box-sizing: border-box !important;
+        background-color: white !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 10px !important;
+        padding: 12px 15px !important;
+        font-size: 18px !important;
+        font-weight: 600 !important;
+        color: #475569 !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+        transition: all 0.2s ease !important;
+        text-align: left !important;
+        height: auto !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stButton"] > button:hover {
+        border-color: #4A90D9 !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stButton"] > button p {
+        font-size: 18px !important;
+        font-weight: 600 !important;
+        color: #475569 !important;
+        margin: 0 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -675,6 +712,30 @@ else:
                     month_proj_map[dd] = []
                 month_proj_map[dd].append((pid, p))
 
+        # ── 캘린더 버튼 색상 계산 ──
+        week_start_cal = today - timedelta(days=today.weekday())   # 이번 주 월요일
+        next_week_start_cal = week_start_cal + timedelta(days=7)   # 다음 주 월요일
+        cal_color_data = {}
+        for _pid, _p in projects.items():
+            _dd = _p.get('info', {}).get('delivery_date', '')
+            if not _dd.startswith(month_str):
+                continue
+            _equip = _p.get('info', {}).get('equipment', '')
+            if not _equip:
+                continue
+            _is_deliv = _p.get('info', {}).get('is_delivered', False)
+            try:
+                _proj_date = datetime.strptime(_dd, "%Y-%m-%d").date()
+            except:
+                _proj_date = None
+            if _is_deliv:
+                _color = "#9ca3af"          # 회색 - 납품완료
+            elif _proj_date and _proj_date >= next_week_start_cal:
+                _color = "#38bdf8"          # 하늘색 - 다음주 이후
+            else:
+                _color = "#ef4444"          # 빨간색 - 이번주 or 지연
+            cal_color_data[_equip] = _color
+
         cal = calendar.monthcalendar(year, month)
         
         # 요일 헤더
@@ -707,9 +768,59 @@ else:
                                 
                                 icon = "✅" if is_deliv else "🚨" if diff <= 7 else "🔵"
                                 
-                                # 프로젝트 버튼 렌더링 (팝업 호출)
-                                if st.button(f"{icon} {info.get('equipment')}", key=f"cal_btn_{pid_item}_{date_str}", help=f"{info.get('company')} / 납기: {info.get('delivery_date')}", use_container_width=True):
+                                # 프로젝트 버튼 렌더링 (팝업 호출) - 이모티콘 제거, JS로 색상 적용
+                                if st.button(f"{info.get('equipment')}", key=f"cal_btn_{pid_item}_{date_str}", help=f"{info.get('company')} / 납기: {info.get('delivery_date')}", use_container_width=True):
                                     show_project_details_dialog(date_str, [(pid_item, p)])
+
+        # ── 캘린더 버튼 색상 JavaScript 주입 ──
+        import json as _json
+        _color_json = _json.dumps(cal_color_data, ensure_ascii=False)
+        st.markdown(f"""
+<script>
+(function() {{
+  var colorMap = {_color_json};
+
+  function applyCalColors() {{
+    // bordered containers = 달력 날짜 셀
+    var cells = document.querySelectorAll('.stVerticalBlockBorderWrapper');
+    cells.forEach(function(cell) {{
+      var buttons = cell.querySelectorAll('button');
+      buttons.forEach(function(btn) {{
+        var p = btn.querySelector('p');
+        var text = (p ? p.textContent : btn.textContent).trim();
+        for (var equip in colorMap) {{
+          if (text === equip || text.includes(equip)) {{
+            var c = colorMap[equip];
+            btn.style.setProperty('background-color', c, 'important');
+            btn.style.setProperty('color', 'white', 'important');
+            btn.style.setProperty('border-color', c, 'important');
+            btn.style.setProperty('border-radius', '6px', 'important');
+            btn.style.setProperty('font-weight', '700', 'important');
+            if (p) {{
+              p.style.setProperty('color', 'white', 'important');
+              p.style.setProperty('font-weight', '700', 'important');
+            }}
+            break;
+          }}
+        }}
+      }});
+    }});
+  }}
+
+  // DOM 변경 감지 (Streamlit 재렌더링 대응)
+  var observer = new MutationObserver(function(mutations) {{
+    var needsUpdate = mutations.some(function(m) {{ return m.addedNodes.length > 0; }});
+    if (needsUpdate) {{ setTimeout(applyCalColors, 80); }}
+  }});
+  observer.observe(document.body, {{ childList: true, subtree: true }});
+
+  // 즉시 실행 + 지연 실행 (초기 로드 대응)
+  applyCalColors();
+  setTimeout(applyCalColors, 300);
+  setTimeout(applyCalColors, 800);
+}})();
+</script>
+""", unsafe_allow_html=True)
 
         if user["role"] == "admin":
             st.markdown("<br><br>", unsafe_allow_html=True)
