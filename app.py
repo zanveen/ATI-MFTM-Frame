@@ -101,6 +101,7 @@ def load_from_sheets():
                     "interior_spec": str(row.get('interior_spec', '')),
                     "notes_top": str(row.get('notes_top', '')),
                     "delivery_delay_count": int(row.get('delivery_delay_count', 0)) if row.get('delivery_delay_count') else 0,
+                    "delay_total_biz_days": int(row.get('delay_total_biz_days', 0)) if row.get('delay_total_biz_days') else 0,
                     "delay_request": json.loads(row.get('delay_request', '{}')) if row.get('delay_request') else {},
                     "is_delivered": str(row.get('is_delivered', '')).upper() in ('TRUE', '1', 'YES')
                 },
@@ -120,7 +121,7 @@ def save_to_sheets(projects):
         
         header = ["pid", "company", "equipment", "order_date", "delivery_date", "frame_parts", 
                   "frame_options", "exterior_spec", "interior_spec", "notes_top", 
-                  "delivery_delay_count", "delay_request", "checks", "special_notes", "history", "is_delivered"]
+                  "delivery_delay_count", "delay_total_biz_days", "delay_request", "checks", "special_notes", "history", "is_delivered"]
         
         data_to_save = [header]
         for pid, p in projects.items():
@@ -130,7 +131,8 @@ def save_to_sheets(projects):
                 pid, info.get('company',''), info.get('equipment',''), info.get('order_date',''), info.get('delivery_date',''),
                 info.get('frame_parts', 1), json.dumps(info.get('frame_options', []), ensure_ascii=False),
                 info.get('exterior_spec',''), info.get('interior_spec',''), info.get('notes_top',''),
-                info.get('delivery_delay_count', 0), json.dumps(info.get('delay_request', {}), ensure_ascii=False),
+                info.get('delivery_delay_count', 0), info.get('delay_total_biz_days', 0),
+                json.dumps(info.get('delay_request', {}), ensure_ascii=False),
                 json.dumps(p.get('checks', {}), ensure_ascii=False), p.get('special_notes',''), 
                 json.dumps(p.get('history', []), ensure_ascii=False), info.get('is_delivered', False)
             ])
@@ -153,6 +155,7 @@ def repair_project(p):
     info.setdefault("equipment", "알수없음")
     info.setdefault("delivery_date", "")
     info.setdefault("delivery_delay_count", 0)
+    info.setdefault("delay_total_biz_days", 0)
     info.setdefault("frame_parts", 1)
     info.setdefault("frame_options", [])
     info.setdefault("is_delivered", False)
@@ -181,6 +184,38 @@ def get_project_status(proj):
             if (d - date.today()).days <= 7: return "납기임박"
         except: pass
     return "진행중"
+
+def count_business_days(start_date, end_date):
+    """두 날짜 사이의 영업일(토일 제외) 수 계산"""
+    if not start_date or not end_date: return 0
+    try:
+        if isinstance(start_date, str): start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+        if isinstance(end_date, str): end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+        days = 0
+        current = start_date
+        step = timedelta(days=1)
+        while current < end_date:
+            if current.weekday() < 5:  # 월~금
+                days += 1
+            current += step
+        return days
+    except:
+        return 0
+
+def calc_company_delay_stats(all_projects, company, period="전체 누적"):
+    """업체별 납기 지연 통계 계산"""
+    total_delays = 0
+    total_delay_biz_days = 0
+    projs = 0
+    for p in all_projects.values():
+        info = p.get("info", {})
+        if info.get("company") != company: continue
+        dd = info.get("delivery_date", "")
+        if period != "전체 누적" and not dd.startswith(period): continue
+        projs += 1
+        total_delays += info.get("delivery_delay_count", 0)
+        total_delay_biz_days += info.get("delay_total_biz_days", 0)
+    return projs, total_delays, total_delay_biz_days
 
 def filter_projects_by_role(all_projects, user_info):
     if user_info["role"] == "admin": return all_projects
@@ -330,15 +365,7 @@ else:
         menu_options.insert(1, "신규 등록")
 
     menu = st.sidebar.radio("메뉴", menu_options, label_visibility="collapsed")
-    
-    # Handle navigation from board/calendar to inspection
-    nav = st.query_params.get("nav", "")
-    if nav == "inspect" and st.session_state.inspection_project:
-        menu = "점검"
-        st.query_params.clear()
-    
-    # Only reset inspection when user MANUALLY clicks a different menu (not via nav)
-    if menu != "점검" and nav != "inspect":
+    if menu != "점검":
         st.session_state.inspection_project = None
 
     st.sidebar.markdown("---")
@@ -375,51 +402,37 @@ else:
                 month_list = sorted(list(months), reverse=True)
                 selected_period = st.selectbox("통계 조회 기간", ["전체 누적"] + month_list)
 
-        # ── 납기 지연 요청 알림 (타이틀 바로 아래) ──
+        # ── 납기 지연 요청 알림 ──
         if user["role"] == "admin":
             pending_reqs = [(pid, p) for pid, p in projects.items() if p.get("info", {}).get("delay_request", {}).get("status") == "pending"]
             if pending_reqs:
                 req_details = " / ".join([f"<b>{p.get('info',{}).get('equipment','')}</b>({p.get('info',{}).get('company','')})" for _, p in pending_reqs])
                 st.markdown(f"""
-                <div style="background-color:#fff3cd; border-left:5px solid #ffc107; padding:12px 16px; border-radius:6px; margin:8px 0 16px 0;">
-                    <b style="color:#856404; font-size:16px;">⚠️ 납기 변경 요청 {len(pending_reqs)}건:</b>
+                <div style="background:#fff3cd; border-left:5px solid #ffc107; padding:10px 16px; border-radius:6px; margin:8px 0;">
+                    <b style="color:#856404;">⚠️ 납기 변경 요청 {len(pending_reqs)}건:</b>
                     <span style="font-size:14px; color:#856404;"> {req_details} → '점검' 메뉴에서 승인/반려</span>
                 </div>
                 """, unsafe_allow_html=True)
 
-        # ── 업체별 현황 (expander로 상세) ──
+        # ── 업체별 현황 (상시 표시, 영업일 지연 포함) ──
         if user["role"] == "admin":
-            h_delays, h_projs, j_delays, j_projs = 0, 0, 0, 0
-            h_delay_days, j_delay_days = 0, 0
-            for p in st.session_state.projects.values():
-                pinfo = p.get("info", {})
-                dd = pinfo.get("delivery_date", "")
-                if selected_period != "전체 누적" and not dd.startswith(selected_period): continue
-                comp = pinfo.get("company", "")
-                delay = pinfo.get("delivery_delay_count", 0)
-                if comp == "한울산업": h_delays += delay; h_projs += 1
-                elif comp == "정한테크": j_delays += delay; j_projs += 1
-            
-            with st.expander(f"📊 {selected_period} 업체별 현황", expanded=False):
-                vc1, vc2 = st.columns(2)
-                with vc1:
-                    st.markdown(f"""
-                    <div style="background:white; padding:16px; border-radius:8px; border:1px solid #e0e0e0; text-align:center;">
-                        <b style="color:#4A90D9; font-size:18px;">한울산업</b><br>
-                        <span>프로젝트: <b>{h_projs}</b>건</span><br>
-                        <span style="color:#e74c3c;">납기 지연: <b>{h_delays}</b>회</span>
-                    </div>
-                    """, unsafe_allow_html=True)
-                with vc2:
-                    st.markdown(f"""
-                    <div style="background:white; padding:16px; border-radius:8px; border:1px solid #e0e0e0; text-align:center;">
-                        <b style="color:#4A90D9; font-size:18px;">정한테크</b><br>
-                        <span>프로젝트: <b>{j_projs}</b>건</span><br>
-                        <span style="color:#e74c3c;">납기 지연: <b>{j_delays}</b>회</span>
-                    </div>
-                    """, unsafe_allow_html=True)
+            h_projs, h_delays, h_biz = calc_company_delay_stats(st.session_state.projects, "한울산업", selected_period)
+            j_projs, j_delays, j_biz = calc_company_delay_stats(st.session_state.projects, "정한테크", selected_period)
 
-        st.markdown("---")
+            st.markdown(f"""
+            <div style="background:#f8f9fa; border:1px solid #dee2e6; padding:12px 16px; border-radius:8px; margin-bottom:12px;">
+                <div style="display:flex; gap:12px;">
+                    <div style="flex:1; background:white; padding:10px; border-radius:6px; border:1px solid #e0e0e0; text-align:center;">
+                        <b style="color:#4A90D9; font-size:15px;">한울산업</b><br>
+                        <span style="font-size:13px;">프로젝트: <b>{h_projs}</b>건 │ 지연: <b style="color:#e74c3c;">{h_delays}</b>회 │ 지연일: <b style="color:#e74c3c;">{h_biz}</b>영업일</span>
+                    </div>
+                    <div style="flex:1; background:white; padding:10px; border-radius:6px; border:1px solid #e0e0e0; text-align:center;">
+                        <b style="color:#4A90D9; font-size:15px;">정한테크</b><br>
+                        <span style="font-size:13px;">프로젝트: <b>{j_projs}</b>건 │ 지연: <b style="color:#e74c3c;">{j_delays}</b>회 │ 지연일: <b style="color:#e74c3c;">{j_biz}</b>영업일</span>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
         if not projects:
             st.info("표시할 프로젝트가 없습니다.")
@@ -428,33 +441,43 @@ else:
             urgent_pids = [pid for pid, p in projects.items() if get_project_status(p) == "납기임박"]
             in_progress_pids = [pid for pid, p in projects.items() if get_project_status(p) == "진행중"]
 
-            # ── 지표 카드: 카드 자체가 버튼 (중복 버튼 제거) ──
+            # ── 지표 카드: 큰 박스 자체가 버튼 ──
+            current_filter = st.session_state.dashboard_filter
             filters_data = [
                 ("전체", len(projects), "전체 프로젝트", "#4A90D9"),
-                ("진행중", len(in_progress_pids), "진행중", "#f39c12"),
-                ("완료", len(completed_pids), "완료", "#27ae60"),
+                ("진행중", len(in_progress_pids), "진행중", "#4A90D9"),
+                ("완료", len(completed_pids), "완료", "#4A90D9"),
                 ("납기임박", len(urgent_pids), "납기임박", "#e74c3c"),
             ]
-            cols = st.columns(4)
+            
+            # HTML로 카드 표시 + 바로 아래 보이지 않는 버튼
+            metric_cols = st.columns(4)
             for i, (key, num, label, color) in enumerate(filters_data):
-                with cols[i]:
-                    is_active = st.session_state.dashboard_filter == key
-                    border = f"3px solid {color}" if is_active else "2px solid #cbd5e1"
+                with metric_cols[i]:
+                    is_active = current_filter == key
+                    border = f"3px solid {color}" if is_active else "2px solid #e0e0e0"
                     bg = "#eff6ff" if (is_active and key != "납기임박") else "#fef2f2" if (is_active and key == "납기임박") else "white"
-                    if st.button(f"{num}\n{label}", key=f"filter_{key}", use_container_width=True):
+                    shadow = "0 4px 12px rgba(0,0,0,0.1)" if is_active else "0 1px 4px rgba(0,0,0,0.05)"
+                    num_color = "#e74c3c" if key == "납기임박" else "#4A90D9"
+                    
+                    st.markdown(f"""
+                    <div style="background:{bg}; border:{border}; border-radius:14px; padding:18px 10px; text-align:center; box-shadow:{shadow}; margin-bottom:4px;">
+                        <div style="font-size:38px; font-weight:900; color:{num_color}; line-height:1.2;">{num}</div>
+                        <div style="font-size:15px; color:#555; font-weight:600; margin-top:2px;">{label}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    if st.button(f"▸ {label}", key=f"filter_{key}", use_container_width=True):
                         st.session_state.dashboard_filter = key
                         st.rerun()
-                    # Override button style via markdown
-                    st.markdown(f"""<style>
-                    [data-testid="stHorizontalBlock"]:has(button[key="filter_{key}"]) button {{
-                    }}</style>""", unsafe_allow_html=True)
 
-            show_pids = list(projects.keys()) if st.session_state.dashboard_filter == "전체" else in_progress_pids if st.session_state.dashboard_filter == "진행중" else completed_pids if st.session_state.dashboard_filter == "완료" else urgent_pids
+            st.markdown("---")
+
+            show_pids = list(projects.keys()) if current_filter == "전체" else in_progress_pids if current_filter == "진행중" else completed_pids if current_filter == "완료" else urgent_pids
 
             if not show_pids:
                 st.info("해당하는 프로젝트가 없습니다.")
             else:
-                sort_option = st.selectbox("정렬 기준", ["납품 예정일순", "진척률 낮은순", "진척률 높은순"], label_visibility="collapsed")
+                sort_option = st.selectbox("정렬", ["납품 예정일순", "진척률 낮은순", "진척률 높은순"], label_visibility="collapsed")
                 sorted_pids = show_pids.copy()
                 if sort_option == "납품 예정일순": sorted_pids.sort(key=lambda x: projects[x].get("info", {}).get("delivery_date", "9999"))
                 elif sort_option == "진척률 낮은순": sorted_pids.sort(key=lambda x: calc_progress(projects[x].get("checks", {})))
@@ -488,44 +511,43 @@ else:
                         except: pass
 
                     opts_html = f'<span style="background:#eff6ff;color:#3b82f6;padding:2px 8px;border-radius:12px;font-size:12px;font-weight:700;border:1px solid #bfdbfe;margin-left:8px;">{", ".join(info.get("frame_options", []))}</span>' if info.get("frame_options") else ''
-                    delay_text = f" │ <span style='color:#e74c3c;font-weight:bold;'>지연{delay_cnt}회</span>" if delay_cnt > 0 else ""
+                    delay_text = f" │ <span style='color:#e74c3c;'>지연{delay_cnt}회</span>" if delay_cnt > 0 else ""
 
-                    # 컴팩트 카드
-                    st.markdown(f"""
-                    <div style="background:white; border-radius:10px; padding:12px 18px; margin-bottom:6px; border-left:4px solid {bar_color}; box-shadow:0 1px 4px rgba(0,0,0,0.06);">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <div style="display:flex; align-items:center; gap:6px;">
-                                <b style="font-size:17px; margin:0;">{info.get("equipment", pid)}</b>{opts_html}
-                            </div>
-                            <div style="display:flex; align-items:center; gap:8px;">{badge} {days_text}</div>
-                        </div>
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
-                            <span style="font-size:13px; color:#666;">{info.get("company","-")} │ 납품: {dd} │ 점수: {score}/100{delay_text}</span>
-                            <span style="font-size:13px; font-weight:bold; color:{bar_color};">{pct}%</span>
-                        </div>
-                        <div style="background:#e8ecf1; border-radius:4px; height:6px; margin-top:6px; overflow:hidden;">
-                            <div style="height:100%; width:{max(pct,2)}%; background:{bar_color}; border-radius:4px;"></div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    # 카드 + 납품완료 버튼 같은 줄
+                    card_col, btn_col = st.columns([9, 1]) if (not is_deliv and user["role"] == "admin") else (st.columns([10]), None) if True else (st.columns([10]), None)
                     
-                    if not is_deliv:
-                        col1, col2, col3 = st.columns([7, 1.5, 1.5])
-                        with col2:
-                            if st.button("📋 점검", key=f"btn_inspect_{pid}", use_container_width=True):
-                                st.session_state.inspection_project = pid
-                                st.query_params["nav"] = "inspect"
-                                st.rerun()
-                        with col3:
-                            if user["role"] == "admin":
-                                if st.button("✅ 납품완료", key=f"btn_done_{pid}", use_container_width=True):
-                                    st.session_state.projects[pid]["info"]["is_delivered"] = True
-                                    save_to_sheets(st.session_state.projects)
-                                    st.session_state.flash_msg = f"✅ [{info.get('equipment')}] 납품 처리 완료!"
-                                    st.rerun()
+                    if not is_deliv and user["role"] == "admin":
+                        card_col, btn_col = st.columns([9, 1])
                     else:
-                        if user["role"] == "admin":
-                            pass  # Already delivered, no actions
+                        card_col = st.columns([1])[0]
+                        btn_col = None
+                    
+                    with card_col:
+                        st.markdown(f"""
+                        <div style="background:white; border-radius:8px; padding:10px 16px; margin-bottom:4px; border-left:4px solid {bar_color}; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <div style="display:flex; align-items:center; gap:6px;">
+                                    <b style="font-size:16px;">{info.get("equipment", pid)}</b>{opts_html}
+                                </div>
+                                <div style="display:flex; align-items:center; gap:6px; font-size:13px;">{badge} {days_text}</div>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:3px;">
+                                <span style="font-size:12px; color:#888;">{info.get("company","-")} │ {dd} │ {score}/100점{delay_text}</span>
+                                <b style="font-size:13px; color:{bar_color};">{pct}%</b>
+                            </div>
+                            <div style="background:#eee; border-radius:3px; height:5px; margin-top:4px; overflow:hidden;">
+                                <div style="height:100%; width:{max(pct,2)}%; background:{bar_color}; border-radius:3px;"></div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    if btn_col and not is_deliv and user["role"] == "admin":
+                        with btn_col:
+                            if st.button("✅", key=f"btn_done_{pid}", use_container_width=True, help="납품 완료 처리"):
+                                st.session_state.projects[pid]["info"]["is_delivered"] = True
+                                save_to_sheets(st.session_state.projects)
+                                st.session_state.flash_msg = f"✅ [{info.get('equipment')}] 납품 처리 완료!"
+                                st.rerun()
 
     # ═══════════════════════════════════════════════════
     # 납기 캘린더
@@ -659,20 +681,12 @@ else:
                             cp = int(data["done"]/data["total"]*100) if data["total"]>0 else 0
                             st.metric(cat, f"{data['done']}/{data['total']}", f"{cp}%")
                     
-                    if not sp_deliv:
-                        btn_col1, btn_col2 = st.columns(2)
-                        with btn_col1:
-                            if st.button("📋 점검 페이지로 이동", key=f"cal_go_{pid_item}", use_container_width=True):
-                                st.session_state.inspection_project = pid_item
-                                st.query_params["nav"] = "inspect"
-                                st.rerun()
-                        with btn_col2:
-                            if user["role"] == "admin":
-                                if st.button("✅ 납품 완료 처리", key=f"cal_dv_{pid_item}", use_container_width=True, type="primary"):
-                                    st.session_state.projects[pid_item]["info"]["is_delivered"] = True
-                                    save_to_sheets(st.session_state.projects)
-                                    st.session_state.flash_msg = f"✅ [{sp_info.get('equipment')}] 납품 처리 완료!"
-                                    st.rerun()
+                    if not sp_deliv and user["role"] == "admin":
+                        if st.button("✅ 납품 완료 처리", key=f"cal_dv_{pid_item}", use_container_width=True):
+                            st.session_state.projects[pid_item]["info"]["is_delivered"] = True
+                            save_to_sheets(st.session_state.projects)
+                            st.session_state.flash_msg = f"✅ [{sp_info.get('equipment')}] 납품 처리 완료!"
+                            st.rerun()
 
     # ═══════════════════════════════════════════════════
     # 프로젝트 등록 (중복 방지 & 팝업 시스템 완벽 탑재!)
@@ -817,8 +831,12 @@ else:
                         st.warning(f"**[{info.get('company')}] 납기 변경 요청** : 기존 {info.get('delivery_date')} -> **희망 {delay_req.get('requested_date')}** (사유: {delay_req.get('reason')})")
                         col_a, col_b, col_c = st.columns([2, 2, 6])
                         if col_a.button("요청 승인 (납기 적용)", use_container_width=True):
-                            proj["info"]["delivery_date"] = delay_req["requested_date"]
+                            old_dd = info.get("delivery_date", "")
+                            new_dd = delay_req["requested_date"]
+                            biz_days = count_business_days(old_dd, new_dd)
+                            proj["info"]["delivery_date"] = new_dd
                             proj["info"]["delivery_delay_count"] = info.get("delivery_delay_count", 0) + 1
+                            proj["info"]["delay_total_biz_days"] = info.get("delay_total_biz_days", 0) + biz_days
                             proj["info"]["delay_request"]["status"] = "approved"
                             save_to_sheets(st.session_state.projects)
                             st.session_state.flash_msg = "✅ 납기 변경 요청이 승인되었습니다."
@@ -844,8 +862,11 @@ else:
                                 elif not confirm_change:
                                     st.error("변경 사항을 적용하시려면 확인 체크박스를 선택해주세요.")
                                 else:
+                                    old_dd_str = info.get("delivery_date", "")
+                                    biz_days = count_business_days(old_dd_str, str(new_date_admin))
                                     proj["info"]["delivery_date"] = str(new_date_admin)
                                     proj["info"]["delivery_delay_count"] = info.get("delivery_delay_count", 0) + 1
+                                    proj["info"]["delay_total_biz_days"] = info.get("delay_total_biz_days", 0) + biz_days
                                     save_to_sheets(st.session_state.projects)
                                     st.session_state.flash_msg = "✅ 납기일이 변경되었습니다!"
                                     st.rerun()
