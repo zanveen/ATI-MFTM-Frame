@@ -71,7 +71,7 @@ def get_logo_html(height="34px"):
         except: pass
     return "<span style='color:#4A90D9; font-weight:900;'>ATI</span> "
 
-# ─── 구 시트 연동 및 복구 로직 ───
+# ─── 구글 시트 연동 및 복구 로직 ───
 def get_gspread_client():
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     credentials = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
@@ -255,6 +255,7 @@ def generate_checklist_excel(project):
     return output
 
 # ─── CSS 스타일 ───
+# 기존 버그를 유발하던 전역 CSS(nth-child 등)를 과감히 삭제하고, 필수적인 레이아웃만 남겼습니다.
 st.markdown("""
 <style>
     .login-container { max-width: 420px; margin: 80px auto; padding: 40px; background: white; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; border-top: 6px solid #4A90D9; }
@@ -263,27 +264,27 @@ st.markdown("""
     [data-testid="stSidebar"] { min-width: 20vw !important; max-width: 20vw !important; background-color: #f0f4f8; }
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] span { font-size: 18px !important; line-height: 1.8 !important; }
     
-    /* 🔥 사이드바 메뉴 탭 폭을 로그아웃 박스(100%)와 동일하게 강제 맞춤 🔥 */
-    [data-testid="stSidebar"] div[data-testid="stRadio"] > div[role="radiogroup"] { 
+    /* 🔥 사이드바 메뉴 탭(박스)을 로그아웃 박스(100%)와 1px 오차 없이 완벽하게 맞춤 🔥 */
+    [data-testid="stSidebar"] div[role="radiogroup"] { 
         width: 100% !important; 
         display: flex !important;
         flex-direction: column !important;
-        align-items: stretch !important;
     }
     [data-testid="stSidebar"] div[role="radiogroup"] > label {
         width: 100% !important;
         display: flex !important;
+        align-items: center !important;
         box-sizing: border-box !important;
         background-color: white;
         border: 1px solid #cbd5e1;
-        border-radius: 10px;
-        padding: 12px 15px !important;
-        margin-bottom: 8px;
+        border-radius: 8px;
+        padding: 10px 15px !important;
+        margin-bottom: 8px !important;
         cursor: pointer;
         transition: all 0.2s ease;
         box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
-    [data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child { display: none; }
+    [data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child { display: none !important; }
     [data-testid="stSidebar"] div[role="radiogroup"] > label:hover {
         border-color: #4A90D9; transform: translateY(-1px); box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
@@ -301,7 +302,7 @@ st.markdown("""
     .main .block-container p, .main .block-container span, .main .block-container label, .main .block-container li, .main .block-container td, .main .block-container th { font-size: 18px !important; line-height: 1.9 !important; }
     .main .block-container h1 { font-size: 34px !important; font-weight: 800; color: #1e293b; }
     
-    /* 프로젝트 카드 및 프로그래스바 */
+    /* 프로젝트 카드 및 뱃지 */
     .project-card { background: white; border-radius: 12px; padding: 22px; margin-bottom: 14px; border-left: 5px solid #4A90D9; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
     .progress-bar-bg { background: #e8ecf1; border-radius: 10px; height: 26px; overflow: hidden; margin: 12px 0 8px 0; }
     .progress-bar-fill { height: 100%; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 13px; transition: width 0.4s ease; }
@@ -310,14 +311,6 @@ st.markdown("""
     .badge-yellow { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
     .badge-red { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     .badge-blue { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
-    
-    /* 캘린더 빈칸 스크롤 제거용 */
-    div[data-testid="stVerticalBlockBorderWrapper"] > div {
-        overflow: hidden !important;
-    }
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        border-radius: 8px !important;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -468,50 +461,51 @@ else:
                 ("납기임박", len(urgent_pids), "납기임박"),
             ]
             
-            # 🔥 대시보드 4개 버튼을 통짜 버튼으로 구현하는 초강력 마커 기반 CSS 🔥
+            # 🔥 대시보드 4개 버튼 UI - 초정밀 마커 타겟팅 적용 (버그 제로) 🔥
             metric_cols = st.columns(4)
             for i, (key, num, label) in enumerate(filters_data):
                 with metric_cols[i]:
-                    marker = f"dash_mk_{key}"
-                    st.markdown(f"<span class='{marker}' style='display:none;'></span>", unsafe_allow_html=True)
-                    
+                    marker = f"dash_btn_{key}"
                     is_active = (current_filter == key)
-                    num_color = "#e74c3c" if key == "납기임박" else "#000000"
-                    border_color = "#e74c3c" if key == "납기임박" else "#4A90D9"
-                    bg_color = "#fef2f2" if (is_active and key == "납기임박") else "#eff6ff" if is_active else "white"
                     
+                    bg_color = "#fef2f2" if (is_active and key == "납기임박") else "#eff6ff" if is_active else "white"
+                    border_color = "#e74c3c" if (is_active and key == "납기임박") else "#4A90D9" if is_active else "#e2e8f0"
+                    num_color = "#e74c3c" if key == "납기임박" else "#000000"
+                    shadow = "0 4px 10px rgba(0,0,0,0.1)" if is_active else "0 2px 4px rgba(0,0,0,0.05)"
+                    
+                    # 마커 역할을 하는 숨겨진 div 생성
+                    st.markdown(f"<div class='{marker}' style='display:none;'></div>", unsafe_allow_html=True)
+                    
+                    # 마커 바로 다음에 오는 element-container(버튼)만을 타겟팅!
                     st.markdown(f"""
                     <style>
-                    div.element-container:has(.{marker}) + div.element-container button,
-                    div.stElementContainer:has(.{marker}) + div.stElementContainer button {{
+                    div.element-container:has(.{marker}) + div.element-container button {{
                         height: 120px !important;
+                        width: 100% !important;
                         border-radius: 12px !important;
                         background-color: {bg_color} !important;
-                        border: 2px solid {border_color if is_active else '#e2e8f0'} !important;
-                        box-shadow: {'0 4px 10px rgba(0,0,0,0.1)' if is_active else '0 2px 4px rgba(0,0,0,0.05)'} !important;
+                        border: 3px solid {border_color} !important;
+                        box-shadow: {shadow} !important;
                         padding: 0 !important;
                         transition: transform 0.2s, box-shadow 0.2s !important;
                     }}
-                    div.element-container:has(.{marker}) + div.element-container button:hover,
-                    div.stElementContainer:has(.{marker}) + div.stElementContainer button:hover {{
+                    div.element-container:has(.{marker}) + div.element-container button:hover {{
                         transform: translateY(-3px) !important;
                         box-shadow: 0 8px 16px rgba(0,0,0,0.1) !important;
                     }}
-                    div.element-container:has(.{marker}) + div.element-container button p::first-line,
-                    div.stElementContainer:has(.{marker}) + div.stElementContainer button p::first-line {{
+                    div.element-container:has(.{marker}) + div.element-container button p::first-line {{
                         color: {num_color} !important;
                         font-size: 42px !important;
                         font-weight: 900 !important;
                         line-height: 1.3 !important;
                     }}
-                    div.element-container:has(.{marker}) + div.element-container button p,
-                    div.stElementContainer:has(.{marker}) + div.stElementContainer button p {{
+                    div.element-container:has(.{marker}) + div.element-container button p {{
                         color: {'#e74c3c' if key == '납기임박' else '#475569'} !important;
                         font-size: 17px !important;
                         font-weight: 700 !important;
-                        white-space: pre-wrap !important;
                         text-align: center !important;
                         width: 100% !important;
+                        margin: 0 !important;
                     }}
                     </style>
                     """, unsafe_allow_html=True)
@@ -544,7 +538,6 @@ else:
                     delay_cnt = info.get("delivery_delay_count", 0)
                     is_deliv = info.get("is_delivered", False)
 
-                    # 🔥 납품완료 텍스트 검은색으로 변경 반영 완료 🔥
                     if is_deliv: badge, bar_color = '<span class="status-badge" style="background:#e2e8f0; color:#000000; border:1px solid #cbd5e1;">✅ 납품완료</span>', "#95a5a6"
                     elif pct >= 50: badge, bar_color = '<span class="status-badge badge-blue">[진행]</span>', "#4A90D9"
                     elif pct > 0: badge, bar_color = '<span class="status-badge badge-yellow">[제작]</span>', "#f39c12"
@@ -688,68 +681,79 @@ else:
             color = "#e74c3c" if day_name == "일" else "#3b82f6" if day_name == "토" else "#333"
             cols[i].markdown(f"<div style='text-align:center; font-weight:bold; color:{color}; padding:10px; background-color:#f8fafc; border:1px solid #e2e8f0; border-radius:5px; margin-bottom:5px;'>{day_name}</div>", unsafe_allow_html=True)
         
-        # 🔥 완벽한 리얼 달력 UI 구현: 일정이 없어도 100% 동일한 컨테이너(130px) 크기 유지 🔥
+        # 🔥 리얼 달력 UI: 프로젝트가 없어도 고정 높이 유지 & 팝업 버튼 색상 완벽 렌더링 🔥
         for week in cal:
             cols = st.columns(7)
             for i, day in enumerate(week):
                 with cols[i]:
-                    with st.container(height=130, border=True):
-                        if day == 0:
-                            st.write("") # 빈칸도 130px 박스 유지!
-                        else:
-                            date_str = f"{year}-{month:02d}-{day:02d}"
-                            is_today = (date_str == today.strftime("%Y-%m-%d"))
-                            day_color = "#e74c3c" if i == 6 else "#3b82f6" if i == 5 else "#333"
-                            weight = "900" if is_today else "bold"
-                            
+                    if day == 0:
+                        # 빈칸 달력 유지용
+                        st.markdown("<div style='height:120px; background-color:#f8fafc; border:1px solid #e2e8f0; border-radius:5px;'></div>", unsafe_allow_html=True)
+                    else:
+                        date_str = f"{year}-{month:02d}-{day:02d}"
+                        is_today = (date_str == today.strftime("%Y-%m-%d"))
+                        day_color = "#e74c3c" if i == 6 else "#3b82f6" if i == 5 else "#333"
+                        weight = "900" if is_today else "bold"
+                        bg_color = "#eff6ff" if is_today else "white"
+                        
+                        day_projs = month_proj_map.get(date_str, [])
+                        
+                        # 컨테이너를 써서 달력의 각 칸(Cell) 생성
+                        with st.container(border=True):
+                            st.markdown(f"<div style='background-color:{bg_color}; min-height:90px;'>", unsafe_allow_html=True)
                             st.markdown(f'<div style="font-weight:{weight}; font-size:16px; margin-bottom:6px; color:{day_color};">{day}{" (오늘)" if is_today else ""}</div>', unsafe_allow_html=True)
                             
-                            day_projs = month_proj_map.get(date_str, [])
                             for pid_item, p in day_projs:
                                 info = p.get("info", {})
                                 is_deliv = info.get("is_delivered", False)
                                 
-                                # 이번주 일요일(end_of_week)까지 계산하여 지연/임박(빨간색) 판별
+                                # 이번 주 일요일 계산하여 지연/임박(빨간색) 판별
                                 start_of_week = today - timedelta(days=today.weekday())
                                 end_of_week = start_of_week + timedelta(days=6)
                                 try: d_date = datetime.strptime(date_str, "%Y-%m-%d").date()
                                 except: d_date = today
                                 
-                                # 🔥 이모티콘 제거 및 요청하신 규칙에 따른 완벽한 색상 적용 🔥
+                                # 완료=회색, 지연/임박=빨간색, 일반=파란색
                                 if is_deliv: 
-                                    badge_color = "#95a5a6" # 납품완료 (회색)
+                                    badge_color = "#95a5a6" 
                                 elif d_date <= end_of_week: 
-                                    badge_color = "#e74c3c" # 지연/임박 및 이번주 이내 (빨간색)
+                                    badge_color = "#e74c3c" 
                                 else: 
-                                    badge_color = "#3b82f6" # 다음주 이후 (파란색)
+                                    badge_color = "#3b82f6" 
                                 
-                                # 버튼을 렌더링하고, 위에서 지정한 색상으로 버튼 배경색을 칠하는 마커 CSS!
+                                # 마커와 CSS를 사용하여 해당 버튼의 배경색만을 정밀 타겟팅!
                                 marker = f"cal_mk_{pid_item}_{date_str.replace('-','')}"
-                                st.markdown(f"<span class='{marker}' style='display:none;'></span>", unsafe_allow_html=True)
+                                st.markdown(f"<div class='{marker}' style='display:none;'></div>", unsafe_allow_html=True)
                                 st.markdown(f"""
                                 <style>
-                                div.element-container:has(.{marker}) + div.element-container button,
-                                div.stElementContainer:has(.{marker}) + div.stElementContainer button {{
+                                div.element-container:has(.{marker}) + div.element-container button {{
                                     background-color: {badge_color} !important;
                                     border-color: {badge_color} !important;
                                     color: white !important;
                                     padding: 2px 5px !important;
+                                    width: 100% !important;
                                     min-height: 0px !important;
                                     height: auto !important;
+                                    border-radius: 4px !important;
+                                    transition: filter 0.2s !important;
+                                }}
+                                div.element-container:has(.{marker}) + div.element-container button p {{
+                                    color: white !important;
                                     font-size: 13px !important;
                                     font-weight: 700 !important;
-                                    transition: filter 0.2s;
+                                    margin: 0 !important;
                                 }}
-                                div.element-container:has(.{marker}) + div.element-container button:hover,
-                                div.stElementContainer:has(.{marker}) + div.stElementContainer button:hover {{
-                                    filter: brightness(0.85);
+                                div.element-container:has(.{marker}) + div.element-container button:hover {{
+                                    filter: brightness(0.85) !important;
                                 }}
                                 </style>
                                 """, unsafe_allow_html=True)
                                 
-                                # 클릭 가능한 프로젝트 버튼 (팝업 호출)
+                                # 이모티콘 뺀 프로젝트 버튼 (팝업 호출)
                                 if st.button(f"{info.get('equipment')}", key=f"cal_btn_{pid_item}_{date_str}", help=f"{info.get('company')} / 납기: {info.get('delivery_date')}", use_container_width=True):
                                     show_project_details_dialog(date_str, [(pid_item, p)])
+                            
+                            st.markdown("</div>", unsafe_allow_html=True)
 
         if user["role"] == "admin":
             st.markdown("<br><br>", unsafe_allow_html=True)
@@ -947,7 +951,7 @@ else:
                                     proj["info"]["delivery_delay_count"] = info.get("delivery_delay_count", 0) + 1
                                     proj["info"]["delay_total_biz_days"] = info.get("delay_total_biz_days", 0) + biz_days
                                     save_to_sheets(st.session_state.projects)
-                                    st.session_state.flash_msg = "✅ 납기일이 변경되었습니다!"
+                                    st.session_state.flash_msg = "✅ 구글 시트에 납기일이 변경되었습니다!"
                                     st.rerun()
 
                 st.markdown("---")
@@ -1025,7 +1029,7 @@ else:
                     if "history" not in proj: proj["history"] = []
                     proj["history"].append({"date": str(check_date), "progress": int(calc_progress(updated_checks) * 100), "score": calc_score(updated_checks), "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M")})
                     save_to_sheets(st.session_state.projects)
-                    st.success("✅ 점검 결과가 저장되었습니다.")
+                    st.success("✅ 구글 시트에 점검 결과가 저장되었습니다.")
 
                 if proj.get("history"):
                     st.markdown("### 점검 히스토리")
