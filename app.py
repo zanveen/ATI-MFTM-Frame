@@ -71,7 +71,7 @@ def get_logo_html(height="34px"):
         except: pass
     return "<span style='color:#4A90D9; font-weight:900;'>ATI</span> "
 
-# ─── 구글 시트 연동 및 복구 로직 ───
+# ─── 구 시트 연동 및 복구 로직 ───
 def get_gspread_client():
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     credentials = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
@@ -263,15 +263,13 @@ st.markdown("""
     [data-testid="stSidebar"] { min-width: 20vw !important; max-width: 20vw !important; background-color: #f0f4f8; }
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] span { font-size: 18px !important; line-height: 1.8 !important; }
     
-    /* 🔥 사이드바 메뉴 탭(박스) 형식 예쁜 UI & 100% 폭 맞춤 완벽 적용 🔥 */
-    [data-testid="stSidebar"] div[data-testid="stRadio"], 
-    [data-testid="stSidebar"] div[role="radiogroup"] { 
+    /* 🔥 사이드바 메뉴 탭 폭을 로그아웃 박스(100%)와 동일하게 강제 맞춤 🔥 */
+    [data-testid="stSidebar"] div[data-testid="stRadio"] > div[role="radiogroup"] { 
         width: 100% !important; 
         display: flex !important;
         flex-direction: column !important;
-        align-items: stretch !important; /* 자식 요소 100% 꽉 채우기 */
+        align-items: stretch !important;
     }
-    [data-testid="stSidebar"] div[role="radiogroup"] { gap: 8px; }
     [data-testid="stSidebar"] div[role="radiogroup"] > label {
         width: 100% !important;
         display: flex !important;
@@ -312,40 +310,13 @@ st.markdown("""
     .badge-yellow { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
     .badge-red { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     .badge-blue { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
-
-    /* 대시보드 통짜 버튼 디자인 */
-    div[data-testid="stHorizontalBlock"] button[kind="primary"] {
-        height: 120px !important; 
-        border-radius: 12px !important; 
-        background-color: white !important;
-        border: 2px solid #e2e8f0 !important; 
-        transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s, border-color 0.2s !important; 
-        padding: 0 !important;
+    
+    /* 캘린더 빈칸 스크롤 제거용 */
+    div[data-testid="stVerticalBlockBorderWrapper"] > div {
+        overflow: hidden !important;
     }
-    div[data-testid="stHorizontalBlock"] button[kind="primary"]:hover {
-        transform: translateY(-3px) !important; 
-        box-shadow: 0 8px 16px rgba(0,0,0,0.1) !important; 
-        border-color: #4A90D9 !important; 
-    }
-    div[data-testid="stHorizontalBlock"] button[kind="primary"] p {
-        display: block !important; 
-        white-space: pre-wrap !important; 
-        font-size: 17px !important; 
-        font-weight: 600 !important; 
-        color: #475569 !important; 
-        text-align: center !important; 
-        margin: 0 !important; 
-        line-height: 1.4 !important;
-        width: 100% !important;
-    }
-    div[data-testid="stHorizontalBlock"] button[kind="primary"] p::first-line {
-        color: #000000 !important; 
-        font-size: 42px !important; 
-        font-weight: 900 !important; 
-        line-height: 1.2 !important;
-    }
-    div[data-testid="column"]:nth-of-type(4) button[kind="primary"] p::first-line { 
-        color: #e74c3c !important; 
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        border-radius: 8px !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -497,23 +468,55 @@ else:
                 ("납기임박", len(urgent_pids), "납기임박"),
             ]
             
+            # 🔥 대시보드 4개 버튼을 통짜 버튼으로 구현하는 초강력 마커 기반 CSS 🔥
             metric_cols = st.columns(4)
             for i, (key, num, label) in enumerate(filters_data):
                 with metric_cols[i]:
-                    if current_filter == key:
-                        active_color = "#e74c3c" if key == "납기임박" else "#4A90D9"
-                        bg_color = "#fef2f2" if key == "납기임박" else "#eff6ff"
-                        st.markdown(f"""
-                        <style>
-                        div[data-testid="column"]:nth-of-type({i+1}) button[kind="primary"] {{
-                            border: 3px solid {active_color} !important;
-                            background-color: {bg_color} !important;
-                            box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important;
-                        }}
-                        </style>
-                        """, unsafe_allow_html=True)
+                    marker = f"dash_mk_{key}"
+                    st.markdown(f"<span class='{marker}' style='display:none;'></span>", unsafe_allow_html=True)
                     
-                    if st.button(f"{num}\n{label}", key=f"filter_{key}", use_container_width=True, type="primary"):
+                    is_active = (current_filter == key)
+                    num_color = "#e74c3c" if key == "납기임박" else "#000000"
+                    border_color = "#e74c3c" if key == "납기임박" else "#4A90D9"
+                    bg_color = "#fef2f2" if (is_active and key == "납기임박") else "#eff6ff" if is_active else "white"
+                    
+                    st.markdown(f"""
+                    <style>
+                    div.element-container:has(.{marker}) + div.element-container button,
+                    div.stElementContainer:has(.{marker}) + div.stElementContainer button {{
+                        height: 120px !important;
+                        border-radius: 12px !important;
+                        background-color: {bg_color} !important;
+                        border: 2px solid {border_color if is_active else '#e2e8f0'} !important;
+                        box-shadow: {'0 4px 10px rgba(0,0,0,0.1)' if is_active else '0 2px 4px rgba(0,0,0,0.05)'} !important;
+                        padding: 0 !important;
+                        transition: transform 0.2s, box-shadow 0.2s !important;
+                    }}
+                    div.element-container:has(.{marker}) + div.element-container button:hover,
+                    div.stElementContainer:has(.{marker}) + div.stElementContainer button:hover {{
+                        transform: translateY(-3px) !important;
+                        box-shadow: 0 8px 16px rgba(0,0,0,0.1) !important;
+                    }}
+                    div.element-container:has(.{marker}) + div.element-container button p::first-line,
+                    div.stElementContainer:has(.{marker}) + div.stElementContainer button p::first-line {{
+                        color: {num_color} !important;
+                        font-size: 42px !important;
+                        font-weight: 900 !important;
+                        line-height: 1.3 !important;
+                    }}
+                    div.element-container:has(.{marker}) + div.element-container button p,
+                    div.stElementContainer:has(.{marker}) + div.stElementContainer button p {{
+                        color: {'#e74c3c' if key == '납기임박' else '#475569'} !important;
+                        font-size: 17px !important;
+                        font-weight: 700 !important;
+                        white-space: pre-wrap !important;
+                        text-align: center !important;
+                        width: 100% !important;
+                    }}
+                    </style>
+                    """, unsafe_allow_html=True)
+                    
+                    if st.button(f"{num}\n{label}", key=f"filter_{key}", use_container_width=True):
                         st.session_state.dashboard_filter = key
                         st.rerun()
 
@@ -541,7 +544,8 @@ else:
                     delay_cnt = info.get("delivery_delay_count", 0)
                     is_deliv = info.get("is_delivered", False)
 
-                    if is_deliv: badge, bar_color = '<span class="status-badge" style="background:#e2e8f0; color:#000000; border:1px solid #cbd5e1;">✅[납품완료]</span>', "#95a5a6"
+                    # 🔥 납품완료 텍스트 검은색으로 변경 반영 완료 🔥
+                    if is_deliv: badge, bar_color = '<span class="status-badge" style="background:#e2e8f0; color:#000000; border:1px solid #cbd5e1;">✅ 납품완료</span>', "#95a5a6"
                     elif pct >= 50: badge, bar_color = '<span class="status-badge badge-blue">[진행]</span>', "#4A90D9"
                     elif pct > 0: badge, bar_color = '<span class="status-badge badge-yellow">[제작]</span>', "#f39c12"
                     else: badge, bar_color = '<span class="status-badge badge-red">[대기]</span>', "#e74c3c"
@@ -684,13 +688,15 @@ else:
             color = "#e74c3c" if day_name == "일" else "#3b82f6" if day_name == "토" else "#333"
             cols[i].markdown(f"<div style='text-align:center; font-weight:bold; color:{color}; padding:10px; background-color:#f8fafc; border:1px solid #e2e8f0; border-radius:5px; margin-bottom:5px;'>{day_name}</div>", unsafe_allow_html=True)
         
-        # 🔥 리얼 달력 UI: 프로젝트가 없어도 고정된 높이의 박스(Container) 출력 🔥
+        # 🔥 완벽한 리얼 달력 UI 구현: 일정이 없어도 100% 동일한 컨테이너(130px) 크기 유지 🔥
         for week in cal:
             cols = st.columns(7)
             for i, day in enumerate(week):
                 with cols[i]:
-                    with st.container(height=150, border=True):
-                        if day != 0:
+                    with st.container(height=130, border=True):
+                        if day == 0:
+                            st.write("") # 빈칸도 130px 박스 유지!
+                        else:
                             date_str = f"{year}-{month:02d}-{day:02d}"
                             is_today = (date_str == today.strftime("%Y-%m-%d"))
                             day_color = "#e74c3c" if i == 6 else "#3b82f6" if i == 5 else "#333"
@@ -702,13 +708,47 @@ else:
                             for pid_item, p in day_projs:
                                 info = p.get("info", {})
                                 is_deliv = info.get("is_delivered", False)
-                                try: diff = (datetime.strptime(date_str, "%Y-%m-%d").date() - today).days
-                                except: diff = 99
                                 
-                                icon = "✅" if is_deliv else "🚨" if diff <= 7 else "🔵"
+                                # 이번주 일요일(end_of_week)까지 계산하여 지연/임박(빨간색) 판별
+                                start_of_week = today - timedelta(days=today.weekday())
+                                end_of_week = start_of_week + timedelta(days=6)
+                                try: d_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                                except: d_date = today
                                 
-                                # 프로젝트 버튼 렌더링 (팝업 호출)
-                                if st.button(f"{icon} {info.get('equipment')}", key=f"cal_btn_{pid_item}_{date_str}", help=f"{info.get('company')} / 납기: {info.get('delivery_date')}", use_container_width=True):
+                                # 🔥 이모티콘 제거 및 요청하신 규칙에 따른 완벽한 색상 적용 🔥
+                                if is_deliv: 
+                                    badge_color = "#95a5a6" # 납품완료 (회색)
+                                elif d_date <= end_of_week: 
+                                    badge_color = "#e74c3c" # 지연/임박 및 이번주 이내 (빨간색)
+                                else: 
+                                    badge_color = "#3b82f6" # 다음주 이후 (파란색)
+                                
+                                # 버튼을 렌더링하고, 위에서 지정한 색상으로 버튼 배경색을 칠하는 마커 CSS!
+                                marker = f"cal_mk_{pid_item}_{date_str.replace('-','')}"
+                                st.markdown(f"<span class='{marker}' style='display:none;'></span>", unsafe_allow_html=True)
+                                st.markdown(f"""
+                                <style>
+                                div.element-container:has(.{marker}) + div.element-container button,
+                                div.stElementContainer:has(.{marker}) + div.stElementContainer button {{
+                                    background-color: {badge_color} !important;
+                                    border-color: {badge_color} !important;
+                                    color: white !important;
+                                    padding: 2px 5px !important;
+                                    min-height: 0px !important;
+                                    height: auto !important;
+                                    font-size: 13px !important;
+                                    font-weight: 700 !important;
+                                    transition: filter 0.2s;
+                                }}
+                                div.element-container:has(.{marker}) + div.element-container button:hover,
+                                div.stElementContainer:has(.{marker}) + div.stElementContainer button:hover {{
+                                    filter: brightness(0.85);
+                                }}
+                                </style>
+                                """, unsafe_allow_html=True)
+                                
+                                # 클릭 가능한 프로젝트 버튼 (팝업 호출)
+                                if st.button(f"{info.get('equipment')}", key=f"cal_btn_{pid_item}_{date_str}", help=f"{info.get('company')} / 납기: {info.get('delivery_date')}", use_container_width=True):
                                     show_project_details_dialog(date_str, [(pid_item, p)])
 
         if user["role"] == "admin":
