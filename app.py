@@ -337,7 +337,9 @@ else:
         menu = "점검"
         st.query_params.clear()
     
-    if menu != "점검": st.session_state.inspection_project = None
+    # Only reset inspection when user MANUALLY clicks a different menu (not via nav)
+    if menu != "점검" and nav != "inspect":
+        st.session_state.inspection_project = None
 
     st.sidebar.markdown("---")
     if st.sidebar.button("로그아웃", use_container_width=True):
@@ -369,46 +371,54 @@ else:
             
         with col_stats:
             if user["role"] == "admin":
-                pending_reqs = [p for p in projects.values() if p.get("info", {}).get("delay_request", {}).get("status") == "pending"]
-                if pending_reqs:
-                    st.markdown(f"""
-                    <div style="background-color:#fff3cd; border-left:5px solid #ffc107; padding:12px; border-radius:6px; margin-bottom:15px;">
-                        <h4 style="margin:0; color:#856404; font-size:18px;">[안내] 납기 변경 요청 접수 ({len(pending_reqs)}건)</h4>
-                        <p style="margin:4px 0 0 0; font-size:14px; color:#856404;">업체에서 납기일 조율을 요청했습니다. '점검' 메뉴에서 승인해주세요.</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
                 months = set(p.get("info", {}).get("delivery_date", "")[:7] for p in st.session_state.projects.values() if p.get("info", {}).get("delivery_date"))
                 month_list = sorted(list(months), reverse=True)
                 selected_period = st.selectbox("통계 조회 기간", ["전체 누적"] + month_list)
-                
-                h_delays, h_projs, j_delays, j_projs = 0, 0, 0, 0
-                for p in st.session_state.projects.values():
-                    info = p.get("info", {})
-                    dd = info.get("delivery_date", "")
-                    if selected_period != "전체 누적" and not dd.startswith(selected_period): continue
-                    comp, delay = info.get("company", ""), info.get("delivery_delay_count", 0)
-                    if comp == "한울산업": h_delays += delay; h_projs += 1
-                    elif comp == "정한테크": j_delays += delay; j_projs += 1
 
+        # ── 납기 지연 요청 알림 (타이틀 바로 아래) ──
+        if user["role"] == "admin":
+            pending_reqs = [(pid, p) for pid, p in projects.items() if p.get("info", {}).get("delay_request", {}).get("status") == "pending"]
+            if pending_reqs:
+                req_details = " / ".join([f"<b>{p.get('info',{}).get('equipment','')}</b>({p.get('info',{}).get('company','')})" for _, p in pending_reqs])
                 st.markdown(f"""
-                <div style="background-color:#f8f9fa; border:1px solid #dee2e6; padding:15px; border-radius:8px;">
-                    <b style="color:#2c3e50; font-size:16px;">{selected_period} 업체별 현황</b>
-                    <div style="display:flex; gap:10px; margin-top:10px;">
-                        <div style="flex:1; background:white; padding:12px; border-radius:6px; border:1px solid #e0e0e0; text-align:center;">
-                            <b style="color:#4A90D9; font-size:16px;">한울산업</b><br>
-                            <span style="font-size:14px;">진행 프로젝트: <b>{h_projs}</b>건</span><br>
-                            <span style="font-size:14px; color:#e74c3c;">납기 지연: <b>{h_delays}</b>회</span>
-                        </div>
-                        <div style="flex:1; background:white; padding:12px; border-radius:6px; border:1px solid #e0e0e0; text-align:center;">
-                            <b style="color:#4A90D9; font-size:16px;">정한테크</b><br>
-                            <span style="font-size:14px;">진행 프로젝트: <b>{j_projs}</b>건</span><br>
-                            <span style="font-size:14px; color:#e74c3c;">납기 지연: <b>{j_delays}</b>회</span>
-                        </div>
-                    </div>
+                <div style="background-color:#fff3cd; border-left:5px solid #ffc107; padding:12px 16px; border-radius:6px; margin:8px 0 16px 0;">
+                    <b style="color:#856404; font-size:16px;">⚠️ 납기 변경 요청 {len(pending_reqs)}건:</b>
+                    <span style="font-size:14px; color:#856404;"> {req_details} → '점검' 메뉴에서 승인/반려</span>
                 </div>
                 """, unsafe_allow_html=True)
-                
+
+        # ── 업체별 현황 (expander로 상세) ──
+        if user["role"] == "admin":
+            h_delays, h_projs, j_delays, j_projs = 0, 0, 0, 0
+            h_delay_days, j_delay_days = 0, 0
+            for p in st.session_state.projects.values():
+                pinfo = p.get("info", {})
+                dd = pinfo.get("delivery_date", "")
+                if selected_period != "전체 누적" and not dd.startswith(selected_period): continue
+                comp = pinfo.get("company", "")
+                delay = pinfo.get("delivery_delay_count", 0)
+                if comp == "한울산업": h_delays += delay; h_projs += 1
+                elif comp == "정한테크": j_delays += delay; j_projs += 1
+            
+            with st.expander(f"📊 {selected_period} 업체별 현황", expanded=False):
+                vc1, vc2 = st.columns(2)
+                with vc1:
+                    st.markdown(f"""
+                    <div style="background:white; padding:16px; border-radius:8px; border:1px solid #e0e0e0; text-align:center;">
+                        <b style="color:#4A90D9; font-size:18px;">한울산업</b><br>
+                        <span>프로젝트: <b>{h_projs}</b>건</span><br>
+                        <span style="color:#e74c3c;">납기 지연: <b>{h_delays}</b>회</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with vc2:
+                    st.markdown(f"""
+                    <div style="background:white; padding:16px; border-radius:8px; border:1px solid #e0e0e0; text-align:center;">
+                        <b style="color:#4A90D9; font-size:18px;">정한테크</b><br>
+                        <span>프로젝트: <b>{j_projs}</b>건</span><br>
+                        <span style="color:#e74c3c;">납기 지연: <b>{j_delays}</b>회</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
         st.markdown("---")
 
         if not projects:
@@ -418,29 +428,28 @@ else:
             urgent_pids = [pid for pid, p in projects.items() if get_project_status(p) == "납기임박"]
             in_progress_pids = [pid for pid, p in projects.items() if get_project_status(p) == "진행중"]
 
-            filters = [
+            # ── 지표 카드: 카드 자체가 버튼 (중복 버튼 제거) ──
+            filters_data = [
                 ("전체", len(projects), "전체 프로젝트", "#4A90D9"),
                 ("진행중", len(in_progress_pids), "진행중", "#f39c12"),
                 ("완료", len(completed_pids), "완료", "#27ae60"),
                 ("납기임박", len(urgent_pids), "납기임박", "#e74c3c"),
             ]
             cols = st.columns(4)
-            for i, (key, num, label, color) in enumerate(filters):
+            for i, (key, num, label, color) in enumerate(filters_data):
                 with cols[i]:
                     is_active = st.session_state.dashboard_filter == key
-                    active_cls = "active-red" if (is_active and key == "납기임박") else "active" if is_active else ""
-                    st.markdown(f"""
-                    <div class="metric-card-html {active_cls}">
-                        <div class="metric-num" style="color:{color};">{num}</div>
-                        <div class="metric-lbl">{label}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    if st.button(key, key=f"filter_{key}", use_container_width=True):
+                    border = f"3px solid {color}" if is_active else "2px solid #cbd5e1"
+                    bg = "#eff6ff" if (is_active and key != "납기임박") else "#fef2f2" if (is_active and key == "납기임박") else "white"
+                    if st.button(f"{num}\n{label}", key=f"filter_{key}", use_container_width=True):
                         st.session_state.dashboard_filter = key
                         st.rerun()
+                    # Override button style via markdown
+                    st.markdown(f"""<style>
+                    [data-testid="stHorizontalBlock"]:has(button[key="filter_{key}"]) button {{
+                    }}</style>""", unsafe_allow_html=True)
 
             show_pids = list(projects.keys()) if st.session_state.dashboard_filter == "전체" else in_progress_pids if st.session_state.dashboard_filter == "진행중" else completed_pids if st.session_state.dashboard_filter == "완료" else urgent_pids
-            st.markdown("<br>", unsafe_allow_html=True)
 
             if not show_pids:
                 st.info("해당하는 프로젝트가 없습니다.")
@@ -462,36 +471,43 @@ else:
                     delay_cnt = info.get("delivery_delay_count", 0)
                     is_deliv = info.get("is_delivered", False)
 
-                    if is_deliv: badge, bar_color = '<span class="status-badge badge-green">[완료] 납품완료</span>', "#95a5a6"
-                    elif pct >= 50: badge, bar_color = '<span class="status-badge badge-blue">[진행] 조립중</span>', "#4A90D9"
-                    elif pct > 0: badge, bar_color = '<span class="status-badge badge-yellow">[초기] 제작중</span>', "#f39c12"
-                    else: badge, bar_color = '<span class="status-badge badge-red">[대기] 미착수</span>', "#e74c3c"
+                    if is_deliv: badge, bar_color = '<span class="status-badge badge-green">[완료]</span>', "#95a5a6"
+                    elif pct >= 50: badge, bar_color = '<span class="status-badge badge-blue">[진행]</span>', "#4A90D9"
+                    elif pct > 0: badge, bar_color = '<span class="status-badge badge-yellow">[제작]</span>', "#f39c12"
+                    else: badge, bar_color = '<span class="status-badge badge-red">[대기]</span>', "#e74c3c"
 
                     dd = info.get("delivery_date", "")
                     days_text = ""
                     if dd and not is_deliv:
                         try:
                             diff = (datetime.strptime(dd, "%Y-%m-%d").date() - date.today()).days
-                            if diff < 0: days_text = f'<span style="color:#e74c3c;font-weight:bold;">납기 {abs(diff)}일 초과</span>'
-                            elif diff == 0: days_text = '<span style="color:#e74c3c;font-weight:bold;">오늘 납품</span>'
+                            if diff < 0: days_text = f'<span style="color:#e74c3c;font-weight:bold;">+{abs(diff)}일</span>'
+                            elif diff == 0: days_text = '<span style="color:#e74c3c;font-weight:bold;">오늘</span>'
                             elif diff <= 7: days_text = f'<span style="color:#e74c3c;font-weight:bold;">D-{diff}</span>'
                             else: days_text = f'<span style="color:#888;">D-{diff}</span>'
                         except: pass
 
-                    opts_html = f'<span style="background:#eff6ff; color:#3b82f6; padding:4px 12px; border-radius:20px; font-size:14px; font-weight:700; border:1px solid #bfdbfe; margin-left:15px;">옵션: {", ".join(info.get("frame_options", []))}</span>' if info.get("frame_options") else ''
-                    delay_text = f" &nbsp;│ <span style='color:#e74c3c;font-weight:bold;'>납기변경 {delay_cnt}회</span>" if delay_cnt > 0 else ""
+                    opts_html = f'<span style="background:#eff6ff;color:#3b82f6;padding:2px 8px;border-radius:12px;font-size:12px;font-weight:700;border:1px solid #bfdbfe;margin-left:8px;">{", ".join(info.get("frame_options", []))}</span>' if info.get("frame_options") else ''
+                    delay_text = f" │ <span style='color:#e74c3c;font-weight:bold;'>지연{delay_cnt}회</span>" if delay_cnt > 0 else ""
 
-                    card_html = (
-                        f'<div class="project-card">'
-                        f'<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:10px;">'
-                        f'<div style="display:flex; align-items:center;"><h3 style="margin:0;">{info.get("equipment", pid)}</h3>{opts_html}</div>'
-                        f'<div style="display:flex; align-items:center; gap:10px;">{badge}<span>{days_text}</span></div>'
-                        f'</div>'
-                        f'<p style="margin-top:5px; color:#475569;">업체: <b style="color:#1e293b;">{info.get("company","-")}</b> │ 납품예정: {dd} │ 검사점수: <b>{score}/100</b> {delay_text}</p>'
-                        f'<div class="progress-bar-bg"><div class="progress-bar-fill" style="width:{max(pct,3)}%;background:{bar_color};">{pct}%</div></div>'
-                        f'</div>'
-                    )
-                    st.markdown(card_html, unsafe_allow_html=True)
+                    # 컴팩트 카드
+                    st.markdown(f"""
+                    <div style="background:white; border-radius:10px; padding:12px 18px; margin-bottom:6px; border-left:4px solid {bar_color}; box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <b style="font-size:17px; margin:0;">{info.get("equipment", pid)}</b>{opts_html}
+                            </div>
+                            <div style="display:flex; align-items:center; gap:8px;">{badge} {days_text}</div>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
+                            <span style="font-size:13px; color:#666;">{info.get("company","-")} │ 납품: {dd} │ 점수: {score}/100{delay_text}</span>
+                            <span style="font-size:13px; font-weight:bold; color:{bar_color};">{pct}%</span>
+                        </div>
+                        <div style="background:#e8ecf1; border-radius:4px; height:6px; margin-top:6px; overflow:hidden;">
+                            <div style="height:100%; width:{max(pct,2)}%; background:{bar_color}; border-radius:4px;"></div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
                     
                     if not is_deliv:
                         col1, col2, col3 = st.columns([7, 1.5, 1.5])
@@ -505,7 +521,7 @@ else:
                                 if st.button("✅ 납품완료", key=f"btn_done_{pid}", use_container_width=True):
                                     st.session_state.projects[pid]["info"]["is_delivered"] = True
                                     save_to_sheets(st.session_state.projects)
-                                    st.session_state.flash_msg = f"✅ [{info.get('equipment')}] 납품 처리가 완료되었습니다!"
+                                    st.session_state.flash_msg = f"✅ [{info.get('equipment')}] 납품 처리 완료!"
                                     st.rerun()
                     else:
                         if user["role"] == "admin":
