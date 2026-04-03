@@ -543,7 +543,7 @@ else:
                     
                     if btn_col and not is_deliv and user["role"] == "admin":
                         with btn_col:
-                            if st.button("✅", key=f"btn_done_{pid}", use_container_width=True, help="납품 완료 처리"):
+                            if st.button("✅납품완료", key=f"btn_done_{pid}", use_container_width=True, help="납품 완료 처리"):
                                 st.session_state.projects[pid]["info"]["is_delivered"] = True
                                 save_to_sheets(st.session_state.projects)
                                 st.session_state.flash_msg = f"✅ [{info.get('equipment')}] 납품 처리 완료!"
