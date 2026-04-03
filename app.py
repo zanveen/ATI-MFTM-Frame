@@ -261,8 +261,8 @@ st.markdown("""
     .login-container { max-width: 420px; margin: 80px auto; padding: 40px; background: white; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; border-top: 6px solid #4A90D9; }
     
     /* 사이드바 크기 및 폰트 */
-    [data-testid="stSidebar"] { min-width: 20vw !important; max-width: 20vw !important; background-color: #f0f4f8; }
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span { font-size: 18px !important; line-height: 1.8 !important; }
+    [data-testid="stSidebar"] { min-width: 15vw !important; max-width: 15vw !important; background-color: #f0f4f8; }
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span { font-size: 15px !important; line-height: 1.8 !important; }
     
     /* 🔥 사이드바 메뉴 탭(박스) 형식 예쁜 UI & 100% 폭 맞춤 완벽 적용 🔥 */
     [data-testid="stSidebar"] div[data-testid="stRadio"], 
@@ -270,9 +270,9 @@ st.markdown("""
         width: 100% !important; 
         display: flex !important;
         flex-direction: column !important;
-        align-items: stretch !important; /* 자식 요소 100% 꽉 채우기 */
+        align-items: stretch !important;
     }
-    [data-testid="stSidebar"] div[role="radiogroup"] { gap: 8px; }
+    [data-testid="stSidebar"] div[role="radiogroup"] { gap: 6px; }
     [data-testid="stSidebar"] div[role="radiogroup"] > label {
         width: 100% !important;
         display: flex !important;
@@ -280,8 +280,8 @@ st.markdown("""
         background-color: white;
         border: 1px solid #cbd5e1;
         border-radius: 10px;
-        padding: 12px 15px !important;
-        margin-bottom: 8px;
+        padding: 10px 13px !important;
+        margin-bottom: 6px;
         cursor: pointer;
         transition: all 0.2s ease;
         box-shadow: 0 1px 3px rgba(0,0,0,0.05);
@@ -290,14 +290,20 @@ st.markdown("""
     [data-testid="stSidebar"] div[role="radiogroup"] > label:hover {
         border-color: #4A90D9; transform: translateY(-1px); box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
-    [data-testid="stSidebar"] div[role="radiogroup"] > label[data-checked="true"] {
-        background-color: #4A90D9 !important; border-color: #4A90D9 !important;
+    /* 선택된 메뉴 강조 - data-checked 및 :has(input:checked) 양쪽 모두 적용 */
+    [data-testid="stSidebar"] div[role="radiogroup"] > label[data-checked="true"],
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {
+        background-color: #4A90D9 !important; 
+        border-color: #4A90D9 !important;
+        box-shadow: 0 4px 12px rgba(74,144,217,0.35) !important;
+        transform: translateY(-1px) !important;
     }
-    [data-testid="stSidebar"] div[role="radiogroup"] > label[data-checked="true"] p {
+    [data-testid="stSidebar"] div[role="radiogroup"] > label[data-checked="true"] p,
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) p {
         color: white !important; font-weight: 800 !important;
     }
     [data-testid="stSidebar"] div[role="radiogroup"] > label p {
-        font-size: 18px !important; font-weight: 600 !important; color: #475569; margin:0; width: 100%; text-align: left;
+        font-size: 15px !important; font-weight: 600 !important; color: #475569; margin:0; width: 100%; text-align: left;
     }
     
     /* 메인 본문 */
@@ -414,12 +420,12 @@ else:
 
     # ─── 사이드바 ───
     st.sidebar.markdown(f"""
-        <div style="font-size:30px; font-weight:bold; margin-bottom:20px; line-height:1.2;">
-            {get_logo_html('32px')} FRAME 진척률 관리
+        <div style="font-size:17px; font-weight:700; margin-bottom:6px; line-height:1.3; color:#1e293b;">
+            {get_logo_html('18px')} FRAME 진척률 관리
         </div>
     """, unsafe_allow_html=True)
         
-    st.sidebar.markdown(f"**환영합니다. {user['name']}님**")
+    st.sidebar.markdown(f"<span style='font-size:12px; font-weight:400; color:#94a3b8;'>환영합니다. {user['name']}님</span>", unsafe_allow_html=True)
     st.sidebar.markdown("---")
 
     menu_options = ["🏠 HOME", "📅 캘린더", "📋 점검", "📥 양식 추출"]
@@ -966,7 +972,7 @@ div:has([data-cbid="{_safe_id}"]) + div button p {{
                                     proj["info"]["delivery_delay_count"] = info.get("delivery_delay_count", 0) + 1
                                     proj["info"]["delay_total_biz_days"] = info.get("delay_total_biz_days", 0) + biz_days
                                     save_to_sheets(st.session_state.projects)
-                                    st.session_state.flash_msg = "✅ 구글 시트에 납기일이 변경되었습니다!"
+                                    st.session_state.flash_msg = "✅ 납기일이 변경되었습니다!"
                                     st.rerun()
 
                 st.markdown("---")
@@ -1044,7 +1050,7 @@ div:has([data-cbid="{_safe_id}"]) + div button p {{
                     if "history" not in proj: proj["history"] = []
                     proj["history"].append({"date": str(check_date), "progress": int(calc_progress(updated_checks) * 100), "score": calc_score(updated_checks), "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M")})
                     save_to_sheets(st.session_state.projects)
-                    st.success("✅ 구글 시트에 점검 결과가 저장되었습니다.")
+                    st.success("✅ 점검 결과가 저장되었습니다.")
 
                 if proj.get("history"):
                     st.markdown("### 점검 히스토리")
