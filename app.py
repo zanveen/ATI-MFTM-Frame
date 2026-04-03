@@ -352,14 +352,22 @@ st.markdown("""
     }
 
     /* 사이드바 로그아웃 버튼 → 메뉴 항목과 동일한 너비/스타일 */
+    [data-testid="stSidebar"] .stButton,
     [data-testid="stSidebar"] [data-testid="stButton"] {
+        display: block !important;
         width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
         box-sizing: border-box !important;
-        padding-left: 0 !important;
-        padding-right: 0 !important;
     }
-    [data-testid="stSidebar"] [data-testid="stButton"] > button {
+    [data-testid="stSidebar"] .stButton > button,
+    [data-testid="stSidebar"] [data-testid="stButton"] > button,
+    [data-testid="stSidebar"] button[kind="secondary"] {
         width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
         box-sizing: border-box !important;
         background-color: white !important;
         border: 1px solid #cbd5e1 !important;
@@ -372,17 +380,42 @@ st.markdown("""
         transition: all 0.2s ease !important;
         text-align: left !important;
         height: auto !important;
+        margin: 0 !important;
     }
+    [data-testid="stSidebar"] .stButton > button:hover,
     [data-testid="stSidebar"] [data-testid="stButton"] > button:hover {
         border-color: #4A90D9 !important;
         transform: translateY(-1px) !important;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
     }
+    [data-testid="stSidebar"] .stButton > button p,
     [data-testid="stSidebar"] [data-testid="stButton"] > button p {
         font-size: 18px !important;
         font-weight: 600 !important;
         color: #475569 !important;
         margin: 0 !important;
+    }
+
+    /* 캘린더 버튼 색상 - CSS :has() 방식 (JS 백업용) */
+    .stVerticalBlockBorderWrapper div:has(span.cal-color-red) + div button,
+    .stVerticalBlockBorderWrapper div:has(span.cal-color-red) + div button:hover { 
+        background-color: #ef4444 !important; color: white !important; 
+        border-color: #ef4444 !important; border-radius: 6px !important; font-weight: 700 !important;
+    }
+    .stVerticalBlockBorderWrapper div:has(span.cal-color-blue) + div button,
+    .stVerticalBlockBorderWrapper div:has(span.cal-color-blue) + div button:hover { 
+        background-color: #38bdf8 !important; color: white !important; 
+        border-color: #38bdf8 !important; border-radius: 6px !important; font-weight: 700 !important;
+    }
+    .stVerticalBlockBorderWrapper div:has(span.cal-color-gray) + div button,
+    .stVerticalBlockBorderWrapper div:has(span.cal-color-gray) + div button:hover { 
+        background-color: #9ca3af !important; color: white !important; 
+        border-color: #9ca3af !important; border-radius: 6px !important; font-weight: 700 !important; 
+    }
+    .stVerticalBlockBorderWrapper div:has(span.cal-color-red) + div button p,
+    .stVerticalBlockBorderWrapper div:has(span.cal-color-blue) + div button p,
+    .stVerticalBlockBorderWrapper div:has(span.cal-color-gray) + div button p { 
+        color: white !important; font-weight: 700 !important; 
     }
 </style>
 """, unsafe_allow_html=True)
@@ -451,10 +484,14 @@ else:
         st.session_state.inspection_project = None
 
     st.sidebar.markdown("---")
-    if st.sidebar.button("로그아웃", use_container_width=True):
-        st.session_state.logged_in = False
-        st.session_state.user_info = None
-        st.rerun()
+    # 로그아웃 버튼 - 컬럼으로 너비를 메뉴 항목과 동일하게 맞춤
+    with st.sidebar:
+        _l, _c, _r = st.columns([0.05, 0.9, 0.05])
+        with _c:
+            if st.button("로그아웃", use_container_width=True, key="logout_main"):
+                st.session_state.logged_in = False
+                st.session_state.user_info = None
+                st.rerun()
         
     projects = filter_projects_by_role(st.session_state.projects, user)
 
@@ -768,59 +805,71 @@ else:
                                 
                                 icon = "✅" if is_deliv else "🚨" if diff <= 7 else "🔵"
                                 
+                                # CSS 마커 span 삽입 (색상 지정용)
+                                _equip_key = info.get('equipment', '')
+                                _c_code = cal_color_data.get(_equip_key, "#38bdf8")
+                                _css_cls = "cal-color-gray" if _c_code == "#9ca3af" else "cal-color-red" if _c_code == "#ef4444" else "cal-color-blue"
+                                st.markdown(f'<span class="{_css_cls}" style="display:none"></span>', unsafe_allow_html=True)
+                                
                                 # 프로젝트 버튼 렌더링 (팝업 호출) - 이모티콘 제거, JS로 색상 적용
                                 if st.button(f"{info.get('equipment')}", key=f"cal_btn_{pid_item}_{date_str}", help=f"{info.get('company')} / 납기: {info.get('delivery_date')}", use_container_width=True):
                                     show_project_details_dialog(date_str, [(pid_item, p)])
 
-        # ── 캘린더 버튼 색상 JavaScript 주입 ──
-        import json as _json
-        _color_json = _json.dumps(cal_color_data, ensure_ascii=False)
-        st.markdown(f"""
+        # ── 캘린더 버튼 색상 JavaScript 주입 (components.v1.html = script 차단 없음) ──
+        import streamlit.components.v1 as _components
+        _color_json = json.dumps(cal_color_data, ensure_ascii=False)
+        _components.html(f"""
 <script>
 (function() {{
   var colorMap = {_color_json};
 
   function applyCalColors() {{
-    // bordered containers = 달력 날짜 셀
-    var cells = document.querySelectorAll('.stVerticalBlockBorderWrapper');
-    cells.forEach(function(cell) {{
-      var buttons = cell.querySelectorAll('button');
-      buttons.forEach(function(btn) {{
-        var p = btn.querySelector('p');
-        var text = (p ? p.textContent : btn.textContent).trim();
-        for (var equip in colorMap) {{
-          if (text === equip || text.includes(equip)) {{
-            var c = colorMap[equip];
-            btn.style.setProperty('background-color', c, 'important');
-            btn.style.setProperty('color', 'white', 'important');
-            btn.style.setProperty('border-color', c, 'important');
-            btn.style.setProperty('border-radius', '6px', 'important');
-            btn.style.setProperty('font-weight', '700', 'important');
-            if (p) {{
-              p.style.setProperty('color', 'white', 'important');
-              p.style.setProperty('font-weight', '700', 'important');
+    try {{
+      var doc = window.parent.document;
+      // bordered containers = 달력 날짜 셀
+      var cells = doc.querySelectorAll('.stVerticalBlockBorderWrapper');
+      cells.forEach(function(cell) {{
+        var buttons = cell.querySelectorAll('button');
+        buttons.forEach(function(btn) {{
+          var pTag = btn.querySelector('p');
+          var text = (pTag ? pTag.textContent : btn.textContent).trim();
+          for (var equip in colorMap) {{
+            if (text === equip || text.includes(equip)) {{
+              var c = colorMap[equip];
+              btn.style.setProperty('background-color', c, 'important');
+              btn.style.setProperty('color', 'white', 'important');
+              btn.style.setProperty('border-color', c, 'important');
+              btn.style.setProperty('border-radius', '6px', 'important');
+              btn.style.setProperty('font-weight', '700', 'important');
+              if (pTag) {{
+                pTag.style.setProperty('color', 'white', 'important');
+                pTag.style.setProperty('font-weight', '700', 'important');
+              }}
+              break;
             }}
-            break;
           }}
-        }}
+        }});
       }});
-    }});
+    }} catch(e) {{ /* cross-origin guard */ }}
   }}
 
   // DOM 변경 감지 (Streamlit 재렌더링 대응)
-  var observer = new MutationObserver(function(mutations) {{
-    var needsUpdate = mutations.some(function(m) {{ return m.addedNodes.length > 0; }});
-    if (needsUpdate) {{ setTimeout(applyCalColors, 80); }}
-  }});
-  observer.observe(document.body, {{ childList: true, subtree: true }});
+  try {{
+    var obs = new MutationObserver(function(mutations) {{
+      if (mutations.some(function(m) {{ return m.addedNodes.length > 0; }})) {{
+        setTimeout(applyCalColors, 100);
+      }}
+    }});
+    obs.observe(window.parent.document.body, {{ childList: true, subtree: true }});
+  }} catch(e) {{}}
 
   // 즉시 실행 + 지연 실행 (초기 로드 대응)
   applyCalColors();
-  setTimeout(applyCalColors, 300);
-  setTimeout(applyCalColors, 800);
+  setTimeout(applyCalColors, 400);
+  setTimeout(applyCalColors, 1200);
 }})();
 </script>
-""", unsafe_allow_html=True)
+""", height=0, scrolling=False)
 
         if user["role"] == "admin":
             st.markdown("<br><br>", unsafe_allow_html=True)
