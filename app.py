@@ -263,31 +263,35 @@ st.markdown("""
     [data-testid="stSidebar"] { min-width: 20vw !important; max-width: 20vw !important; background-color: #f0f4f8; }
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] span { font-size: 18px !important; line-height: 1.8 !important; }
     
-    /* 🔥 사이드바 메뉴 탭(박스) 형식 예쁜 UI & 100% 폭 맞춤 적용 🔥 */
-    [data-testid="stSidebar"] div[role="radiogroup"] { gap: 8px; }
+    /* 🔥 사이드바 메뉴 탭(박스) 형식 예쁜 UI & 100% 폭 맞춤 완벽 적용 🔥 */
+    [data-testid="stSidebar"] div[role="radiogroup"] { 
+        width: 100%; 
+    }
     [data-testid="stSidebar"] div[role="radiogroup"] > label {
+        width: 100% !important;
+        display: flex !important;
+        box-sizing: border-box !important;
         background-color: white;
         border: 1px solid #cbd5e1;
         border-radius: 10px;
-        padding: 12px 15px;
+        padding: 12px 15px !important;
+        margin-bottom: 8px;
         cursor: pointer;
         transition: all 0.2s ease;
         box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        width: 100%;        /* 박스 폭 100% 맞춤 */
-        display: block;     /* 블록 요소로 변경 */
     }
-    [data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child { display: none; /* 동그라미 숨김 */ }
+    [data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child { display: none; }
     [data-testid="stSidebar"] div[role="radiogroup"] > label:hover {
         border-color: #4A90D9; transform: translateY(-1px); box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     [data-testid="stSidebar"] div[role="radiogroup"] > label[data-checked="true"] {
-        background-color: #4A90D9; border-color: #4A90D9;
+        background-color: #4A90D9 !important; border-color: #4A90D9 !important;
     }
     [data-testid="stSidebar"] div[role="radiogroup"] > label[data-checked="true"] p {
         color: white !important; font-weight: 800 !important;
     }
     [data-testid="stSidebar"] div[role="radiogroup"] > label p {
-        font-size: 18px !important; font-weight: 600 !important; color: #475569; margin:0;
+        font-size: 18px !important; font-weight: 600 !important; color: #475569; margin:0; width: 100%; text-align: left;
     }
     
     /* 메인 본문 */
@@ -303,7 +307,43 @@ st.markdown("""
     .badge-yellow { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
     .badge-red { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     .badge-blue { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
-    .category-header { background: #4A90D9; color: white; padding: 10px 18px; border-radius: 8px; margin: 22px 0 10px 0; font-weight: bold; font-size: 19px; }
+
+    /* 🔥 대시보드 통짜 버튼 디자인 (Primary 속성만 타겟팅하여 타 버튼 오작동 완벽 차단) 🔥 */
+    div[data-testid="stHorizontalBlock"] button[kind="primary"] {
+        height: 120px !important; 
+        border-radius: 12px !important; 
+        background-color: white !important;
+        border: 2px solid #e2e8f0 !important; 
+        transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s, border-color 0.2s !important; 
+        padding: 0 !important;
+    }
+    div[data-testid="stHorizontalBlock"] button[kind="primary"]:hover {
+        transform: translateY(-3px) !important; 
+        box-shadow: 0 8px 16px rgba(0,0,0,0.1) !important; 
+        border-color: #4A90D9 !important; 
+    }
+    div[data-testid="stHorizontalBlock"] button[kind="primary"] p {
+        display: block !important; 
+        white-space: pre-wrap !important; 
+        font-size: 17px !important; 
+        font-weight: 600 !important; 
+        color: #475569 !important; 
+        text-align: center !important; 
+        margin: 0 !important; 
+        line-height: 1.4 !important;
+        width: 100% !important;
+    }
+    /* 기본 숫자 색상: 검은색 강제 고정 */
+    div[data-testid="stHorizontalBlock"] button[kind="primary"] p::first-line {
+        color: #000000 !important; 
+        font-size: 42px !important; 
+        font-weight: 900 !important; 
+        line-height: 1.2 !important;
+    }
+    /* 납기임박(4번째) 컬럼 숫자만 빨간색 고정 */
+    div[data-testid="column"]:nth-of-type(4) button[kind="primary"] p::first-line { 
+        color: #e74c3c !important; 
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -448,53 +488,30 @@ else:
 
             current_filter = st.session_state.dashboard_filter
             filters_data = [
-                ("전체", len(projects), "전체 프로젝트", "#4A90D9"),
-                ("진행중", len(in_progress_pids), "진행중", "#4A90D9"),
-                ("완료", len(completed_pids), "완료", "#4A90D9"),
-                ("납기임박", len(urgent_pids), "납기임박", "#e74c3c"),
+                ("전체", len(projects), "전체 프로젝트"),
+                ("진행중", len(in_progress_pids), "진행중"),
+                ("완료", len(completed_pids), "완료"),
+                ("납기임박", len(urgent_pids), "납기임박"),
             ]
             
-            # 🔥 HTML <div> + button 콤보 대신, 아예 전체를 버튼으로 구현하는 CSS 주입 🔥
+            # 🔥 대시보드 4개 메인 버튼 UI/선택 효과 적용 🔥
             metric_cols = st.columns(4)
-            for i, (key, num, label, color) in enumerate(filters_data):
+            for i, (key, num, label) in enumerate(filters_data):
                 with metric_cols[i]:
-                    is_active = current_filter == key
-                    bg_col = color if is_active else "white"
-                    txt_col = "white" if is_active else color
-                    lbl_col = "white" if is_active else "#475569"
+                    if current_filter == key:
+                        active_color = "#e74c3c" if key == "납기임박" else "#4A90D9"
+                        bg_color = "#fef2f2" if key == "납기임박" else "#eff6ff"
+                        st.markdown(f"""
+                        <style>
+                        div[data-testid="column"]:nth-of-type({i+1}) button[kind="primary"] {{
+                            border: 3px solid {active_color} !important;
+                            background-color: {bg_color} !important;
+                            box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important;
+                        }}
+                        </style>
+                        """, unsafe_allow_html=True)
                     
-                    st.markdown(f"""
-                    <style>
-                    div[data-testid="column"]:nth-of-type({i+1}) button {{
-                        height: 120px !important;
-                        border-radius: 16px !important;
-                        background-color: {bg_col} !important;
-                        border: 2px solid {color} !important;
-                        box-shadow: 0 4px 6px rgba(0,0,0,0.05) !important;
-                        transition: transform 0.2s, box-shadow 0.2s !important;
-                        padding: 0 !important;
-                    }}
-                    div[data-testid="column"]:nth-of-type({i+1}) button:hover {{
-                        transform: translateY(-3px) !important;
-                        box-shadow: 0 8px 15px rgba(0,0,0,0.1) !important;
-                    }}
-                    div[data-testid="column"]:nth-of-type({i+1}) button p {{
-                        color: {lbl_col} !important;
-                        font-size: 16px !important;
-                        font-weight: 700 !important;
-                        margin: 0 !important;
-                        line-height: 1.5 !important;
-                        white-space: pre-wrap !important;
-                    }}
-                    div[data-testid="column"]:nth-of-type({i+1}) button p::first-line {{
-                        color: {txt_col} !important;
-                        font-size: 42px !important;
-                        font-weight: 900 !important;
-                    }}
-                    </style>
-                    """, unsafe_allow_html=True)
-                    
-                    if st.button(f"{num}\n{label}", key=f"filter_{key}", use_container_width=True):
+                    if st.button(f"{num}\n{label}", key=f"filter_{key}", use_container_width=True, type="primary"):
                         st.session_state.dashboard_filter = key
                         st.rerun()
 
@@ -522,7 +539,6 @@ else:
                     delay_cnt = info.get("delivery_delay_count", 0)
                     is_deliv = info.get("is_delivered", False)
 
-                    # 🔥 납품완료 텍스트 검은색으로 변경 🔥
                     if is_deliv: badge, bar_color = '<span class="status-badge" style="background:#e2e8f0; color:#000000; border:1px solid #cbd5e1;">✅[납품완료]</span>', "#95a5a6"
                     elif pct >= 50: badge, bar_color = '<span class="status-badge badge-blue">[진행]</span>', "#4A90D9"
                     elif pct > 0: badge, bar_color = '<span class="status-badge badge-yellow">[제작]</span>', "#f39c12"
@@ -565,20 +581,20 @@ else:
                     
                     if btn_col and not is_deliv and user["role"] == "admin":
                         with btn_col:
-                            if st.button("✅납품완료", key=f"btn_done_{pid}", use_container_width=True, help="납품 완료 처리"):
+                            if st.button("✅ 납품완료", key=f"btn_done_{pid}", use_container_width=True, help="납품 완료 처리"):
                                 st.session_state.projects[pid]["info"]["is_delivered"] = True
                                 save_to_sheets(st.session_state.projects)
                                 st.session_state.flash_msg = f"✅ [{info.get('equipment')}] 납품 처리 완료!"
                                 st.rerun()
 
     # ═══════════════════════════════════════════════════
-    # 📅 캘린더 (날짜 텍스트화 & 버튼 팝업)
+    # 📅 캘린더 (리얼 달력 디자인 & 팝업 적용 완료)
     # ═══════════════════════════════════════════════════
     elif menu == "📅 캘린더":
         
         @st.dialog("프로젝트 상세 현황", width="large")
         def show_project_details_dialog(date_str, day_projs):
-            st.markdown(f"#### {date_str} 프로젝트 현황 ({len(day_projs)}건)")
+            st.markdown(f"#### 📅 {date_str} 프로젝트 현황 ({len(day_projs)}건)")
             day_projs.sort(key=lambda x: x[1].get('info', {}).get('company', ''))
             
             for pid_item, p in day_projs:
@@ -640,7 +656,7 @@ else:
                 {get_logo_html('34px')} 프로젝트 납기 캘린더
             </div>
         """, unsafe_allow_html=True)
-        st.markdown("달력에 표시된 **프로젝트 이름표를 클릭**하면 상세 현황 창이 나타납니다.")
+        st.markdown("달력에 표시된 **프로젝트 버튼을 클릭**하면 상세 현황 창이 나타납니다.")
         st.markdown("---")
 
         today = date.today()
@@ -659,57 +675,39 @@ else:
 
         cal = calendar.monthcalendar(year, month)
         
-        # 🔥 리얼한 달력 비율을 맞추기 위한 table-layout: fixed 🔥
-        html_cal_top = '<table style="width:100%; table-layout: fixed; border-collapse: collapse; background:white; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-radius:10px; overflow:hidden;">'
-        st.markdown(html_cal_top, unsafe_allow_html=True)
-        
+        # 요일 헤더
         day_names = ["월", "화", "수", "목", "금", "토", "일"]
         cols = st.columns(7)
         for i, day_name in enumerate(day_names):
             color = "#e74c3c" if day_name == "일" else "#3b82f6" if day_name == "토" else "#333"
             cols[i].markdown(f"<div style='text-align:center; font-weight:bold; color:{color}; padding:10px; background-color:#f8fafc; border:1px solid #e2e8f0; border-radius:5px; margin-bottom:5px;'>{day_name}</div>", unsafe_allow_html=True)
         
-        # 달력 생성
+        # 🔥 리얼 달력 UI: 프로젝트가 없어도 고정된 높이의 박스(Container) 출력 🔥
         for week in cal:
             cols = st.columns(7)
             for i, day in enumerate(week):
                 with cols[i]:
-                    if day == 0:
-                        st.markdown("<div style='height:140px; background-color:#f8fafc; border:1px solid #e2e8f0; border-radius:5px;'></div>", unsafe_allow_html=True)
-                    else:
-                        date_str = f"{year}-{month:02d}-{day:02d}"
-                        is_today = (date_str == today.strftime("%Y-%m-%d"))
-                        day_projs = month_proj_map.get(date_str, [])
-                        
-                        bg_color = "#eff6ff" if is_today else "white"
-                        
-                        with st.container(border=True):
-                            st.markdown(f"<div style='height:130px; overflow-y:auto; background-color:{bg_color};'>", unsafe_allow_html=True)
-                            
-                            # 날짜 표시
+                    with st.container(height=150, border=True):
+                        if day != 0:
+                            date_str = f"{year}-{month:02d}-{day:02d}"
+                            is_today = (date_str == today.strftime("%Y-%m-%d"))
                             day_color = "#e74c3c" if i == 6 else "#3b82f6" if i == 5 else "#333"
                             weight = "900" if is_today else "bold"
+                            
                             st.markdown(f'<div style="font-weight:{weight}; font-size:16px; margin-bottom:6px; color:{day_color};">{day}{" (오늘)" if is_today else ""}</div>', unsafe_allow_html=True)
                             
-                            # 프로젝트 버튼 렌더링
+                            day_projs = month_proj_map.get(date_str, [])
                             for pid_item, p in day_projs:
                                 info = p.get("info", {})
                                 is_deliv = info.get("is_delivered", False)
                                 try: diff = (datetime.strptime(date_str, "%Y-%m-%d").date() - today).days
                                 except: diff = 99
                                 
-                                if is_deliv: 
-                                    icon = "✅"
-                                elif diff <= 7: 
-                                    icon = "🚨"
-                                else: 
-                                    icon = "🔵"
+                                icon = "✅" if is_deliv else "🚨" if diff <= 7 else "🔵"
                                 
-                                # 프로젝트를 누르면 팝업(Dialog) 호출
+                                # 프로젝트 버튼 렌더링 (팝업 호출)
                                 if st.button(f"{icon} {info.get('equipment')}", key=f"cal_btn_{pid_item}_{date_str}", help=f"{info.get('company')} / 납기: {info.get('delivery_date')}", use_container_width=True):
                                     show_project_details_dialog(date_str, [(pid_item, p)])
-                            
-                            st.markdown("</div>", unsafe_allow_html=True)
 
         if user["role"] == "admin":
             st.markdown("<br><br>", unsafe_allow_html=True)
@@ -743,12 +741,13 @@ else:
         with st.form("new_project_form", clear_on_submit=True):
             company = st.radio("업체명 *", ["한울산업", "정한테크"], horizontal=True)
             
-            col_d1, col_d2, _ = st.columns([2, 2, 4])
-            with col_d1: order_date = st.date_input("발주일")
-            with col_d2: frame_parts = st.number_input("Frame Part 수 (덩어리) *", min_value=1, value=1, step=1)
+            c1, c2 = st.columns(2)
+            equipment = c1.text_input("장비명 (설비명) *", placeholder="장비명을 입력하세요")
+            order_date = c2.date_input("발주일")
             
-            equipment = st.text_input("장비명 (설비명) *", placeholder="장비명을 입력하세요")
-            delivery_date = st.date_input("납품 예정일자")
+            c3, c4 = st.columns(2)
+            frame_parts = c3.number_input("Frame Part 수 (덩어리) *", min_value=1, value=1, step=1)
+            delivery_date = c4.date_input("납품 예정일자")
 
             st.markdown("<br><b>프레임 옵션</b>", unsafe_allow_html=True)
             opt_cols = st.columns(3)
