@@ -167,9 +167,9 @@ def repair_project(p):
     return p
 
 def calc_progress(checks):
-    # 엑셀 수식과 동일: COUNTIF(D13:E32,"○")/20 → 확인+미비 항목 수 / 20
-    checked = sum(1 for c in checks.values() if c.get("status") in ("확인", "미비"))
-    return checked / 20
+    # 진척률 = 점수/100 (엑셀 수식과 동일)
+    total_score = sum(5 if c.get("status") == "확인" else 2 if c.get("status") == "미비" else 0 for c in checks.values())
+    return total_score / 100
 
 def calc_score(checks):
     return sum(5 if c.get("status") == "확인" else 2 if c.get("status") == "미비" else 0 for c in checks.values())
@@ -352,76 +352,17 @@ st.markdown("""
         color: #e74c3c !important; 
     }
 
-    /* 사이드바 로그아웃 버튼 → 메뉴 항목과 동일한 너비/스타일
-       button[kind="secondary"] = 가장 확실한 셀렉터 */
-    [data-testid="stSidebar"] button[kind="secondary"] {
-        width: 100% !important;
-        min-width: 0 !important;
-        max-width: 100% !important;
-        display: block !important;
-        box-sizing: border-box !important;
-        background-color: white !important;
-        border: 1px solid #cbd5e1 !important;
-        border-radius: 10px !important;
-        padding: 12px 15px !important;
-        font-size: 18px !important;
-        font-weight: 600 !important;
-        color: #475569 !important;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
-        transition: all 0.2s ease !important;
-        text-align: left !important;
-        height: auto !important;
-        margin: 0 !important;
+    /* 로그아웃 메뉴 항목 - 빨간색으로 구분 (라디오 그룹 마지막 항목) */
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:last-child {
+        border-color: #fca5a5 !important;
+        margin-top: 8px !important;
     }
-    [data-testid="stSidebar"] button[kind="secondary"]:hover {
-        border-color: #4A90D9 !important;
-        transform: translateY(-1px) !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:last-child p {
+        color: #e74c3c !important;
     }
-    [data-testid="stSidebar"] button[kind="secondary"] p {
-        font-size: 18px !important;
-        font-weight: 600 !important;
-        color: #475569 !important;
-        margin: 0 !important;
-    }
-    /* 버튼 부모 컨테이너도 full-width 강제 */
-    [data-testid="stSidebar"] div:has(> button[kind="secondary"]),
-    [data-testid="stSidebar"] div:has(> div > button[kind="secondary"]) {
-        width: 100% !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        box-sizing: border-box !important;
-    }
-
-    /* 캘린더 색상 마커 span - 시각적으로 숨김 */
-    span.cal-color-red, span.cal-color-blue, span.cal-color-gray {
-        display: block !important;
-        height: 0 !important;
-        overflow: hidden !important;
-        line-height: 0 !important;
-        font-size: 0 !important;
-    }
-
-    /* 캘린더 버튼 색상 - data-testid 기반 셀렉터 (클래스명보다 안정적) */
-    [data-testid="stVerticalBlockBorderWrapper"] div:has(span.cal-color-red) + div button,
-    [data-testid="stVerticalBlockBorderWrapper"] div:has(span.cal-color-red) + div button:hover { 
-        background-color: #ef4444 !important; color: white !important; 
-        border-color: #ef4444 !important; border-radius: 6px !important; font-weight: 700 !important;
-    }
-    [data-testid="stVerticalBlockBorderWrapper"] div:has(span.cal-color-blue) + div button,
-    [data-testid="stVerticalBlockBorderWrapper"] div:has(span.cal-color-blue) + div button:hover { 
-        background-color: #38bdf8 !important; color: white !important; 
-        border-color: #38bdf8 !important; border-radius: 6px !important; font-weight: 700 !important;
-    }
-    [data-testid="stVerticalBlockBorderWrapper"] div:has(span.cal-color-gray) + div button,
-    [data-testid="stVerticalBlockBorderWrapper"] div:has(span.cal-color-gray) + div button:hover { 
-        background-color: #9ca3af !important; color: white !important; 
-        border-color: #9ca3af !important; border-radius: 6px !important; font-weight: 700 !important;
-    }
-    [data-testid="stVerticalBlockBorderWrapper"] div:has(span.cal-color-red) + div button p,
-    [data-testid="stVerticalBlockBorderWrapper"] div:has(span.cal-color-blue) + div button p,
-    [data-testid="stVerticalBlockBorderWrapper"] div:has(span.cal-color-gray) + div button p { 
-        color: white !important; font-weight: 700 !important; 
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:last-child:hover {
+        border-color: #e74c3c !important;
+        background-color: #fef2f2 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -484,16 +425,18 @@ else:
     menu_options = ["🏠 HOME", "📅 캘린더", "📋 점검", "📥 양식 추출"]
     if user["role"] == "admin":
         menu_options.insert(1, "➕ 신규 등록")
+    menu_options.append("🚪 로그아웃")   # 너비 보장 위해 라디오 그룹 마지막에 포함
 
     menu = st.sidebar.radio("메뉴", menu_options, label_visibility="collapsed")
-    if menu != "📋 점검":
-        st.session_state.inspection_project = None
 
-    st.sidebar.markdown("---")
-    if st.sidebar.button("로그아웃", use_container_width=True):
+    # 로그아웃 선택 시 즉시 처리
+    if menu == "🚪 로그아웃":
         st.session_state.logged_in = False
         st.session_state.user_info = None
         st.rerun()
+
+    if menu != "📋 점검":
+        st.session_state.inspection_project = None
         
     projects = filter_projects_by_role(st.session_state.projects, user)
 
@@ -804,17 +747,27 @@ else:
                                 is_deliv = info.get("is_delivered", False)
                                 try: diff = (datetime.strptime(date_str, "%Y-%m-%d").date() - today).days
                                 except: diff = 99
-                                
-                                icon = "✅" if is_deliv else "🚨" if diff <= 7 else "🔵"
-                                
-                                # CSS 마커 span 삽입 (색상 지정용)
-                                _equip_key = info.get('equipment', '')
-                                _c_code = cal_color_data.get(_equip_key, "#38bdf8")
-                                _css_cls = "cal-color-gray" if _c_code == "#9ca3af" else "cal-color-red" if _c_code == "#ef4444" else "cal-color-blue"
-                                st.markdown(f'<span class="{_css_cls}"></span>', unsafe_allow_html=True)
-                                
-                                # 프로젝트 버튼 렌더링 (팝업 호출) - 이모티콘 제거, JS로 색상 적용
-                                if st.button(f"{info.get('equipment')}", key=f"cal_btn_{pid_item}_{date_str}", help=f"{info.get('company')} / 납기: {info.get('delivery_date')}", use_container_width=True):
+
+                                _equip = info.get('equipment', '')
+                                _btn_color = cal_color_data.get(_equip, "#38bdf8")
+                                # 버튼마다 고유 ID → 개별 CSS 직접 주입 (가장 확실한 방식)
+                                _safe_id = f"cb_{pid_item}_{date_str}".replace('-','').replace(' ','').replace('(','').replace(')','').replace('/','').replace('_','')[:40]
+                                st.markdown(f"""<style>
+div:has([data-cbid="{_safe_id}"]) + div button,
+div:has([data-cbid="{_safe_id}"]) + div button:hover {{
+    background-color: {_btn_color} !important;
+    color: white !important;
+    border-color: {_btn_color} !important;
+    border-radius: 6px !important;
+    font-weight: 700 !important;
+}}
+div:has([data-cbid="{_safe_id}"]) + div button p {{
+    color: white !important;
+    font-weight: 700 !important;
+}}
+</style><div data-cbid="{_safe_id}" style="height:0;overflow:hidden;margin:0;padding:0;"></div>""", unsafe_allow_html=True)
+
+                                if st.button(_equip, key=f"cal_btn_{pid_item}_{date_str}", help=f"{info.get('company')} / 납기: {info.get('delivery_date')}", use_container_width=True):
                                     show_project_details_dialog(date_str, [(pid_item, p)])
 
         if user["role"] == "admin":
